@@ -31,10 +31,13 @@ coverage/
 .eslintcache
 *.tsbuildinfo
 
-# Prisma (local dev DB)
-prisma/dev.db
-prisma/*.db
-prisma/*.db-journal
+# Prisma (local dev DBs)
+**/prisma/*.db
+**/prisma/*.db-journal
+**/prisma/*.sqlite
+**/prisma/*.sqlite-journal
+**/prisma/*.sqlite3
+**/prisma/*.sqlite3-journal
 
 # OS / IDE
 .DS_Store
