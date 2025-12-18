@@ -1,0 +1,54 @@
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
+import { SocketProvider } from './hooks/useSocket'
+import Layout from './components/layout/Layout'
+import Landing from './pages/Landing'
+import Home from './pages/Home'
+import Welcome from './pages/Welcome'
+import Room from './pages/Room'
+import Game from './pages/Game'
+import Spectate from './pages/Spectate'
+import Profile from './pages/Profile'
+import SessionSwitched from './pages/SessionSwitched'
+import { useEffect } from 'react'
+import { useNavigate, useParams, useLocation } from 'react-router-dom'
+
+const RoomEntry = () => {
+  const { gameId } = useParams()
+  const navigate = useNavigate()
+  useEffect(() => {
+    if (gameId) navigate(`/room/${gameId}`, { replace: true })
+  }, [gameId, navigate])
+  return null
+}
+
+const FallbackRedirect = () => {
+  const navigate = useNavigate()
+  const location = useLocation()
+  useEffect(() => {
+    if (location.pathname !== '/') navigate('/', { replace: true })
+  }, [location.pathname, navigate])
+  return null
+}
+
+export default function App() {
+  return (
+    <Router>
+      <SocketProvider>
+        <Layout>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/home" element={<Home />} />
+            <Route path="/welcome" element={<Welcome />} />
+            <Route path="/profile" element={<Profile />} />
+            <Route path="/session-switched" element={<SessionSwitched />} />
+            <Route path="/:gameId([A-Za-z0-9]{6})" element={<RoomEntry />} />
+            <Route path="/room/:gameId" element={<Room />} />
+            <Route path="/game/:gameId" element={<Game />} />
+            <Route path="/spectate/:spectateToken" element={<Spectate />} />
+            <Route path="*" element={<FallbackRedirect />} />
+          </Routes>
+        </Layout>
+      </SocketProvider>
+    </Router>
+  )
+}

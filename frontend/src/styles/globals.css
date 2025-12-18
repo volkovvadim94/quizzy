@@ -1,0 +1,445 @@
+@import "tailwindcss/base";
+@import "tailwindcss/components";
+@import "tailwindcss/utilities";
+
+:root {
+  font-family: 'Inter', system-ui, sans-serif;
+  --tw-backdrop-opacity: 0.9 !important;
+
+  /* Dedicated badge palette (independent from daisyUI semantic colors) */
+  --quizzy-badge-1-bg: #3a4de6;
+  --quizzy-badge-1-fg: #f8fbff;
+  --quizzy-badge-2-bg: #22c55e;
+  --quizzy-badge-2-fg: #0b1224;
+  --quizzy-badge-3-bg: #22d3ee;
+  --quizzy-badge-3-fg: #041016;
+  --quizzy-badge-4-bg: #ef4444;
+  --quizzy-badge-4-fg: #ffffff;
+  --quizzy-badge-5-bg: #a855f7;
+  --quizzy-badge-5-fg: #ffffff;
+  --quizzy-badge-6-bg: #64748b;
+  --quizzy-badge-6-fg: #ffffff;
+}
+
+.badge-q1,
+.badge-q2,
+.badge-q3,
+.badge-q4,
+.badge-q5,
+.badge-q6 {
+  border-color: transparent !important;
+}
+.badge-q1 {
+  background-color: var(--quizzy-badge-1-bg) !important;
+  color: var(--quizzy-badge-1-fg) !important;
+}
+.badge-q2 {
+  background-color: var(--quizzy-badge-2-bg) !important;
+  color: var(--quizzy-badge-2-fg) !important;
+}
+.badge-q3 {
+  background-color: var(--quizzy-badge-3-bg) !important;
+  color: var(--quizzy-badge-3-fg) !important;
+}
+.badge-q4 {
+  background-color: var(--quizzy-badge-4-bg) !important;
+  color: var(--quizzy-badge-4-fg) !important;
+}
+.badge-q5 {
+  background-color: var(--quizzy-badge-5-bg) !important;
+  color: var(--quizzy-badge-5-fg) !important;
+}
+.badge-q6 {
+  background-color: var(--quizzy-badge-6-bg) !important;
+  color: var(--quizzy-badge-6-fg) !important;
+}
+
+* {
+  text-shadow: none !important;
+}
+
+body,
+.text-base-content,
+.text-neutral-content {
+  color: #f8fbff !important;
+}
+
+html, body {
+  min-height: 100%;
+}
+
+body {
+  background: #070a12;
+  color: #ffffff;
+  overflow: hidden;
+}
+
+.page-shell {
+  position: relative;
+  min-height: 100vh;
+  background: #0a0f1b !important;
+}
+
+.room-join-input {
+  background: #000000 !important;
+  color: #e5e7eb !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.room-join-input:focus {
+  box-shadow: inset 0 0 0 2px #3a4de6 !important;
+}
+
+.page-shell::before {
+  background: none;
+}
+
+.glass-card {
+  background: #0f1626;
+  border: none;
+  box-shadow: none;
+}
+
+.bg-base-100,
+.bg-base-200,
+.bg-base-300 {
+  background-color: #0f1626 !important;
+  color: #f8fbff !important;
+}
+
+.navbar-surface {
+  background: #11192a !important;
+  border-bottom: none !important;
+  color: #e5e7eb;
+}
+
+.difficulty-modal {
+  background: #0f1626 !important;
+  color: #e5e7eb !important;
+  border: none !important;
+}
+
+.modal {
+  transition: opacity 200ms ease, transform 200ms ease;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: rgba(0, 0, 0, 0.9) !important;
+}
+
+.modal[open] .modal-box {
+  animation: fadeInModal 200ms ease forwards;
+}
+
+.modal.closing .modal-box {
+  animation: fadeOutModal 200ms ease forwards;
+}
+
+@keyframes fadeInModal {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fadeOutModal {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+}
+
+/* Плотный фон для оверлея модалок */
+.modal::backdrop,
+dialog::backdrop,
+dialog[open]::backdrop,
+dialog.modal::backdrop,
+.modal.modal-open::backdrop,
+.modal-backdrop,
+*::backdrop,
+#top-layer,
+.modal.modal-open {
+  background: rgba(0, 0, 0, 0.9) !important;
+  opacity: 1 !important;
+  inset: 0 !important;
+  backdrop-filter: none !important;
+}
+
+/* DaisyUI non-dialog modal backdrop */
+.modal:where(:not(dialog)) {
+  background: rgba(0, 0, 0, 0.9) !important;
+}
+
+.scroll-mask {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.scroll-mask::-webkit-scrollbar {
+  display: none;
+}
+
+@supports (-webkit-touch-callout: none) {
+  .scroll-mask {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+
+/* Backdrop for profile dropdown */
+.dropdown.dropdown-open::after,
+.dropdown:focus-within::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  z-index: 40;
+  pointer-events: none;
+}
+
+.dropdown.dropdown-open .dropdown-content {
+  z-index: 50;
+}
+
+.dropdown:focus-within .dropdown-content {
+  z-index: 50;
+}
+
+.room-join-input::placeholder {
+  color: rgba(229, 231, 235, 0.6) !important;
+}
+
+.room-join {
+  background: #0f172a !important;
+  border: none !important;
+}
+
+.game-timer {
+  background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.8; }
+}
+
+.answer-option {
+  transition: all 0.2s ease;
+}
+
+.answer-option:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.btn {
+  padding-left: 1.5rem !important;
+  padding-right: 1.5rem !important;
+}
+
+.btn-sm {
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+}
+
+.btn-lg {
+  padding-left: 2rem !important;
+  padding-right: 2rem !important;
+}
+
+@keyframes ready-pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+  }
+  50% {
+    transform: scale(1.02);
+    box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+  }
+}
+
+.ready-button-pulse {
+  animation: ready-pulse 2s infinite;
+}
+
+.input-with-padding {
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+}
+
+/* Difficulty modal solid backgrounds */
+.difficulty-modal {
+  background: #0f1626 !important;
+  color: #e5e7eb !important;
+  border: none !important;
+}
+
+/* Flat look: убираем тени/градиенты/бордеры у основных элементов */
+.btn,
+.card,
+.modal-box,
+.navbar,
+.input,
+.textarea,
+.select {
+  box-shadow: none !important;
+  border: none !important;
+  background-image: none !important;
+}
+
+.btn {
+  background-color: #7e7e7e !important;
+  color: #f8fbff !important;
+}
+
+.card,
+.modal-box {
+  background: #0f1626 !important;
+  color: #f8fbff !important;
+}
+
+.input,
+.textarea,
+.select {
+  background: #0f172a !important;
+  color: #f8fbff !important;
+}
+
+.btn-primary {
+  background-color: #3a4de6 !important;
+  border-color: #3a4de6 !important;
+  color: #ffffff !important;
+}
+
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active {
+  background-color: #3a4de6 !important;
+  border-color: #3a4de6 !important;
+}
+
+.btn-secondary {
+  background-color: #a855f7 !important;
+  color: #ffffff !important;
+}
+
+.btn-ghost {
+  background-color: transparent !important;
+  color: #e5e7eb !important;
+}
+
+.btn-black {
+  background-color: #000000 !important;
+  color: #f8fbff !important;
+}
+
+.topic-btn {
+  background-color: #142e58 !important;
+  color: #f8fbff !important;
+  transition: none !important;
+  touch-action: pan-y;
+}
+
+/* iOS/Safari: reduce "stutter" when scrolling over interactive cards */
+.topic-card {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+.topic-btn:hover,
+.topic-btn:focus,
+.topic-btn:active,
+.topic-btn:focus-visible {
+  background-color: #142e58 !important;
+  color: #f8fbff !important;
+  transform: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.primary-flat {
+  background-color: #3a4de6 !important;
+  border-color: #3a4de6 !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+/* Прогрессбар таймера в игре */
+.progress-bar-fill {
+  transform-origin: right center;
+  animation-name: shrinkBar, colorShift;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes shrinkBar {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes colorShift {
+  from {
+    background: #3a4de6;
+  }
+  to {
+    background: #e53935;
+  }
+}
+
+/* ---------- Mobile/iOS stability fixes ---------- */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  -webkit-touch-callout: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Better click responsiveness & less ghost-click on mobile */
+button, a, [role="button"], .btn {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.pointer-pass {
+  pointer-events: none;
+}
+
+.safe-bottom {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+}
+
+/* iOS/Safari hit-testing stability for blurred cards */
+.glass-card {
+  position: relative;
+  z-index: 0;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+/* Improve scroll performance for long topic lists (Chrome/Android) */
+.topic-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 140px 320px;
+}

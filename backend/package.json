@@ -1,0 +1,24 @@
+{
+  "name": "quizzy-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=.env server.js",
+    "dev": "nodemon --exec \"node --env-file=.env\" server.js",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "node prisma/seed.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2",
+    "jsonwebtoken": "^9.0.2",
+    "crypto": "^1.0.1",
+    "cors": "^2.8.5",
+    "prisma": "^5.3.1",
+    "@prisma/client": "^5.3.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
