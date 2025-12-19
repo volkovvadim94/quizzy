@@ -1,9 +1,9 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { LogOut, Trophy } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { useSocket } from '../../hooks/useSocket'
-import { getTelegramWebApp, safeTgCall } from '../../utils/telegram'
+import { getTelegramStartParam, getTelegramWebApp, safeTgCall } from '../../utils/telegram'
 import {
   STORAGE_KEYS,
   getActiveGame,
@@ -23,9 +23,16 @@ export default function Layout({ children }) {
   const { socket, on, off, emit } = useSocket()
   const navigate = useNavigate()
   const location = useLocation()
+  const handledStartParamRef = useRef(false)
 
   const tgWebApp = getTelegramWebApp()
   const isWebApp = Boolean(tgWebApp?.initData)
+
+  const resolveStartRoomCode = () => {
+    const startParam = getTelegramStartParam()
+    const roomCode = (startParam || '').trim()
+    return /^[A-Za-z0-9]{6}$/.test(roomCode) ? roomCode : ''
+  }
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', 'quizzyDark')
@@ -38,6 +45,29 @@ export default function Layout({ children }) {
     safeTgCall('expand')
   }, [tgWebApp])
 
+  // Telegram deep-link support (t.me/... ?startapp=ROOMCODE).
+  useEffect(() => {
+    if (handledStartParamRef.current) return
+    const roomCode = resolveStartRoomCode()
+    if (!roomCode) return
+
+    handledStartParamRef.current = true
+
+    if (
+      location.pathname.startsWith('/room/') ||
+      location.pathname.startsWith('/game/') ||
+      location.pathname.startsWith('/spectate/') ||
+      location.pathname.startsWith('/profile') ||
+      location.pathname.startsWith('/session-switched') ||
+      /^\/[A-Za-z0-9]{6}$/.test(location.pathname)
+    ) {
+      return
+    }
+
+    setLastRoomHint(roomCode)
+    navigate(`/room/${roomCode}`, { replace: true })
+  }, [location.pathname, navigate])
+
   // Auto-restore active game only when authenticated
   useEffect(() => {
     if (loading) return
@@ -49,12 +79,23 @@ export default function Layout({ children }) {
       return
     }
 
-    const checkAndRedirect = async () => {
-      if (!active) {
-        const directMatch = location.pathname.match(/^\/([A-Za-z0-9]{6})$/)
-        if (directMatch) navigate(`/room/${directMatch[1]}`, { replace: true })
-        return
-      }
+      const checkAndRedirect = async () => {
+        if (!active) {
+          const startRoom = resolveStartRoomCode()
+          if (startRoom) {
+            setLastRoomHint(startRoom)
+            const isSpectate = location.pathname.startsWith('/spectate/')
+            const isOnProfile = location.pathname.startsWith('/profile')
+            if (!isSpectate && !isOnProfile && !location.pathname.startsWith('/room/') && !location.pathname.startsWith('/game/')) {
+              navigate(`/room/${startRoom}`, { replace: true })
+              return
+            }
+          }
+
+          const directMatch = location.pathname.match(/^\/([A-Za-z0-9]{6})$/)
+          if (directMatch) navigate(`/room/${directMatch[1]}`, { replace: true })
+          return
+        }
 
       const { id: activeGame, phase: activePhase } = active
       const isOnRoom = location.pathname.startsWith(`/room/${activeGame}`)
@@ -112,11 +153,10 @@ export default function Layout({ children }) {
       if (reason !== 'io server disconnect') return
       if (location.pathname.startsWith('/session-switched')) return
       const gid = matchRoomIdFromPath() || getActiveGame()?.id || ''
-      if (!gid) return
-      setLastRoomHint(gid)
+      if (gid) setLastRoomHint(gid)
       clearActiveGame()
       setSessionSuspended(true)
-      navigate(`/session-switched?gameId=${encodeURIComponent(gid)}`, { replace: true })
+      navigate(`/session-switched${gid ? `?gameId=${encodeURIComponent(gid)}` : ''}`, { replace: true })
     }
 
     on('SESSION_TAKEN_OVER', handleTakenOver)
@@ -131,6 +171,9 @@ export default function Layout({ children }) {
   // Register current device/session with backend so it can enforce takeover by telegramId.
   useEffect(() => {
     if (!user) return
+    // Spectate/TV mode should not authenticate over sockets, otherwise opening it in another tab/device
+    // can accidentally take over the active player session.
+    if (location.pathname.startsWith('/spectate/')) return
     if (location.pathname.startsWith('/session-switched') && isSessionSuspended()) return
     const token = localStorage.getItem(STORAGE_KEYS.token)
     if (!token) return
@@ -196,6 +239,15 @@ export default function Layout({ children }) {
   const score = user?.totalScore ?? 0
   const displayName =
     user?.username || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Игрок'
+
+  // TV/Spectate mode must be full-bleed without the app header.
+  if (location.pathname.startsWith('/spectate/')) {
+    return (
+      <div className="page-shell text-base-content transition-colors flex flex-col h-screen overflow-hidden">
+        <main className="scroll-mask flex-1 min-h-0 w-full safe-bottom">{children}</main>
+      </div>
+    )
+  }
 
   return (
     <div className="page-shell text-base-content transition-colors flex flex-col h-screen overflow-hidden">

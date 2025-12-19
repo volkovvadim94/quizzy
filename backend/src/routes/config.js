@@ -17,6 +17,12 @@ router.get('/', (_req, res) => {
     // Backward-compat: older env name used in some setups
     parseBool(process.env.FEATURE_QUESTION_RATING, false);
 
+  // Default ON: keep current UX unless explicitly disabled.
+  const playersListInGame = parseBool(process.env.FEATURE_PLAYERS_LIST_IN_GAME, true);
+
+  // Default OFF: bots should be opt-in.
+  const bots = parseBool(process.env.FEATURE_BOTS, false);
+
   res.set('Cache-Control', 'no-store');
   res.json({
     server: {
@@ -26,6 +32,8 @@ router.get('/', (_req, res) => {
     },
     features: {
       difficultySelection,
+      playersListInGame,
+      bots,
     },
   });
 });

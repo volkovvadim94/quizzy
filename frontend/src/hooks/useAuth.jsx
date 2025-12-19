@@ -91,7 +91,8 @@ export function AuthProvider({ children }) {
   // bootstrap from cache + sync with server
   useEffect(() => {
     ;(async () => {
-      if (isTelegramWebApp()) {
+      const isWebApp = isTelegramWebApp()
+      if (isWebApp) {
         const initDataRaw = getInitDataRaw()
         const webAppUser = parseTelegramWebAppUser(initDataRaw)
         const currentTgId = webAppUser?.id ? String(webAppUser.id) : null
@@ -102,10 +103,22 @@ export function AuthProvider({ children }) {
       const token = localStorage.getItem(STORAGE_KEYS.token)
       const cachedUser = readJSON(STORAGE_KEYS.user, null)
       if (token && cachedUser) setUser(cachedUser)
-      if (token) await refreshMe()
+
+      if (token) {
+        await refreshMe()
+      } else if (isWebApp) {
+        const initDataRaw = getInitDataRaw()
+        if (initDataRaw) {
+          try {
+            await login({ initDataRaw })
+          } catch {
+            // Ignore and allow manual login UI to handle it.
+          }
+        }
+      }
       setLoading(false)
     })()
-  }, [refreshMe, clearAuth])
+  }, [refreshMe, clearAuth, login])
 
   const value = useMemo(
     () => ({

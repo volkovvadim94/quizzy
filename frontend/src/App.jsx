@@ -16,7 +16,7 @@ const RoomEntry = () => {
   const { gameId } = useParams()
   const navigate = useNavigate()
   useEffect(() => {
-    if (gameId) navigate(`/room/${gameId}`, { replace: true })
+    if (gameId) navigate(`/room/${String(gameId).toUpperCase()}`, { replace: true })
   }, [gameId, navigate])
   return null
 }

@@ -3,6 +3,7 @@ import pkg from '@prisma/client'
 import { authenticateToken } from '../middleware/auth.js'
 import {
   createRoomState,
+  addBotsToRoom,
   generateRoomCode,
   getRoomState,
   listRooms,
@@ -13,6 +14,50 @@ import { DIFFICULTY_LABELS } from '../utils/constants.js'
 const { PrismaClient } = pkg
 const prisma = new PrismaClient()
 const router = express.Router()
+
+const parseOptions = (options) => {
+  if (Array.isArray(options)) return options
+  try {
+    return JSON.parse(options || '[]')
+  } catch {
+    return []
+  }
+}
+
+const shuffleIndices = (n) => {
+  const arr = Array.from({ length: n }, (_, i) => i)
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr
+}
+
+const getOrCreateOptionOrder = (room, question) => {
+  if (!room || !question) return null
+  if (!room.questionOptionOrders) room.questionOptionOrders = new Map()
+  const existing = room.questionOptionOrders.get(question.id)
+  if (Array.isArray(existing) && existing.length) return existing
+
+  const opts = parseOptions(question.options)
+  const n = Array.isArray(opts) ? opts.length : 0
+  const order = n > 1 ? shuffleIndices(n) : Array.from({ length: n }, (_, i) => i)
+  room.questionOptionOrders.set(question.id, order)
+  return order
+}
+
+const toPublicQuestion = (room, question, { ensureOrder = false } = {}) => {
+  const opts = parseOptions(question?.options)
+  const order = ensureOrder ? getOrCreateOptionOrder(room, question) : room?.questionOptionOrders?.get?.(question?.id) || null
+  const shuffled =
+    Array.isArray(order) && order.length === opts.length
+      ? order.map((i) => opts[i])
+      : opts
+  // Remove answers from spectate payload
+  // eslint-disable-next-line no-unused-vars
+  const { correctOption, correctSequence, ...rest } = { ...question, options: shuffled, optionOrder: order || null }
+  return rest
+}
 
 const parseBool = (value, defaultValue = true) => {
   if (value === undefined || value === null) return defaultValue
@@ -36,6 +81,13 @@ const featureDifficultySelection = () =>
   parseBool(process.env.FEATURE_DIFFICULTY_SELECTION, false) ||
   // Backward-compat: older env name used in some setups
   parseBool(process.env.FEATURE_QUESTION_RATING, false)
+
+const featureBots = () => parseBool(process.env.FEATURE_BOTS, false)
+
+const getRealPlayerIds = (room) =>
+  Array.from(room?.players?.values?.() || [])
+    .filter((p) => !p?.isBot && typeof p?.playerId === 'number' && p.playerId > 0)
+    .map((p) => p.playerId)
 
 const slugify = (str = '') =>
   str
@@ -100,8 +152,9 @@ router.post('/create', authenticateToken, async (req, res) => {
     const existing = listRooms().find((r) => r.organizerId === req.user.id && r.status !== 'finished')
     if (existing) {
       logEvent('room.create.existing', { roomId: existing.id, organizerId: req.user.id, status: existing.status })
+      if (featureBots()) addBotsToRoom(existing, { count: 10 })
       const users = await prisma.user.findMany({
-        where: { id: { in: Array.from(existing.players.keys()) } },
+        where: { id: { in: getRealPlayerIds(existing) } },
         select: {
           id: true,
           username: true,
@@ -123,6 +176,7 @@ router.post('/create', authenticateToken, async (req, res) => {
       difficulty: chosenDifficulty,
       organizerId: req.user.id,
     })
+    if (featureBots()) addBotsToRoom(room, { count: 10 })
 
     logEvent('room.create', {
       roomId: room.id,
@@ -132,7 +186,7 @@ router.post('/create', authenticateToken, async (req, res) => {
     })
 
     const users = await prisma.user.findMany({
-      where: { id: { in: Array.from(room.players.keys()) } },
+      where: { id: { in: getRealPlayerIds(room) } },
       select: {
         id: true,
         username: true,
@@ -153,11 +207,12 @@ router.post('/create', authenticateToken, async (req, res) => {
 
 router.get('/spectate/:spectateToken', async (req, res) => {
   try {
-    const room = getRoomState(req.params.spectateToken)
+    const token = String(req.params.spectateToken || '').toUpperCase()
+    const room = getRoomState(token)
     if (!room) return res.status(404).json({ error: 'Комната не найдена' })
 
     const users = await prisma.user.findMany({
-      where: { id: { in: Array.from(room.players.keys()) } },
+      where: { id: { in: getRealPlayerIds(room) } },
       select: {
         id: true,
         username: true,
@@ -179,7 +234,7 @@ router.get('/spectate/:spectateToken', async (req, res) => {
       gamePlayers: roomToPublic(room, byId).gamePlayers,
       gameQuestions: room.questions.map((q, idx) => ({
         orderIndex: idx,
-        question: q,
+        question: toPublicQuestion(room, q, { ensureOrder: room.status === 'active' && idx === room.currentQuestion }),
       })),
     })
   } catch (error) {
@@ -190,11 +245,12 @@ router.get('/spectate/:spectateToken', async (req, res) => {
 
 router.get('/:gameId', authenticateToken, async (req, res) => {
   try {
-    const room = getRoomState(req.params.gameId)
+    const gameId = String(req.params.gameId || '').toUpperCase()
+    const room = getRoomState(gameId)
     if (!room) return res.status(404).json({ error: 'Комната не найдена или уже завершена' })
 
     const users = await prisma.user.findMany({
-      where: { id: { in: Array.from(room.players.keys()) } },
+      where: { id: { in: getRealPlayerIds(room) } },
       select: {
         id: true,
         username: true,

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useConfig } from '../hooks/useConfig'
@@ -11,6 +11,7 @@ const PHASES = {
   LOADING: 'loading',
   QUESTION: 'question',
   REVEAL: 'reveal',
+  SCORING: 'scoring',
   FINISHED: 'finished',
 }
 
@@ -55,12 +56,14 @@ const normalizeMediaUrl = (file, folder) => {
 const isPlaceholderMedia = (url) => url === '/media/placeholder.png'
 
 const Game = () => {
-  const { gameId } = useParams()
+  const { gameId: gameIdParam } = useParams()
   const { user, refreshMe } = useAuth()
-  useConfig() // keeping provider usage consistent
+  const { features } = useConfig()
 
   const { socket, emit, on, off } = useSocket()
   const navigate = useNavigate()
+
+  const gameId = String(gameIdParam || '').toUpperCase()
 
   const [phase, setPhase] = useState(PHASES.LOADING)
   const [currentQuestion, setCurrentQuestion] = useState(null)
@@ -89,6 +92,18 @@ const Game = () => {
   const [snackbar, setSnackbar] = useState({ message: '', type: 'success', visible: false })
   const snackTimer = useRef(null)
   const lastQuestionIdRef = useRef(null)
+  const scoringTimersRef = useRef([])
+  const [scoreOverlay, setScoreOverlay] = useState({
+    visible: false,
+    hiding: false,
+    step: 'idle', // idle | before | updated | reordered
+    changedIds: [],
+    displayPlayers: [],
+    beforeById: {},
+    afterById: {},
+  })
+  const scoreRowRefs = useRef(new Map())
+  const prevScoreRowTops = useRef(new Map())
 
   const showSnackbar = (message, type = 'success') => {
     if (snackTimer.current) clearTimeout(snackTimer.current)
@@ -96,9 +111,49 @@ const Game = () => {
     snackTimer.current = setTimeout(() => setSnackbar((prev) => ({ ...prev, visible: false })), 2000)
   }
 
+  const clearScoringTimers = () => {
+    for (const t of scoringTimersRef.current) clearTimeout(t)
+    scoringTimersRef.current = []
+  }
+
+  const getPublicPlayerId = (p) => p?.playerId ?? p?.player?.id ?? null
+
+  useLayoutEffect(() => {
+    if (!scoreOverlay.visible) {
+      prevScoreRowTops.current = new Map()
+      return
+    }
+
+    const nextTops = new Map()
+    for (const [id, el] of scoreRowRefs.current.entries()) {
+      if (!el) continue
+      nextTops.set(id, el.getBoundingClientRect().top)
+    }
+
+    for (const [id, el] of scoreRowRefs.current.entries()) {
+      if (!el) continue
+      const prevTop = prevScoreRowTops.current.get(id)
+      const nextTop = nextTops.get(id)
+      if (prevTop === undefined || nextTop === undefined) continue
+      const delta = prevTop - nextTop
+      if (!delta) continue
+
+      el.style.transition = 'transform 0s'
+      el.style.transform = `translateY(${delta}px)`
+      requestAnimationFrame(() => {
+        if (!scoreRowRefs.current.get(id)) return
+        el.style.transition = 'transform 850ms ease'
+        el.style.transform = ''
+      })
+    }
+
+    prevScoreRowTops.current = nextTops
+  }, [scoreOverlay.visible, scoreOverlay.displayPlayers.map((p) => `${getPublicPlayerId(p) ?? 'x'}:${p?.score ?? 0}`).join('|')])
+
   useEffect(() => {
     return () => {
       if (snackTimer.current) clearTimeout(snackTimer.current)
+      clearScoringTimers()
     }
   }, [])
 
@@ -117,10 +172,10 @@ const Game = () => {
   useEffect(() => {
     if (!socket || !user) return
 
-    const join = () =>
-      emit('JOIN_GAME', { gameId, playerId: user.id, player: user, clientSessionId: getClientSessionId() })
-    if (socket.connected) join()
-    on('connect', join)
+    if (gameIdParam && gameIdParam !== gameId) {
+      navigate(`/game/${gameId}`, { replace: true })
+      return
+    }
 
     const handleGameStarted = () => {
       setPhase(PHASES.QUESTION)
@@ -133,13 +188,20 @@ const Game = () => {
     on('GAME_LOADING', handleGameLoading)
 
     const handleNewQuestion = (data) => {
+      clearScoringTimers()
+      setScoreOverlay((prev) => (prev.visible ? { ...prev, visible: false, hiding: false, step: 'idle' } : prev))
       setPhase(PHASES.QUESTION)
       const q = data.question
       // Avoid re-shuffling/resetting the same question if backend re-sends NEW_QUESTION on reconnect/join.
       if (q?.id && lastQuestionIdRef.current === q.id) return
       lastQuestionIdRef.current = q?.id ?? null
       setCurrentQuestion(q)
-      const perm = buildShuffledOptions(parseOptions(q))
+      const options = parseOptions(q)
+      const order = Array.isArray(q?.optionOrder) ? q.optionOrder : null
+      const perm =
+        order && order.length === options.length
+          ? options.map((text, displayIndex) => ({ text, originalIndex: order[displayIndex] ?? displayIndex }))
+          : buildShuffledOptions(options)
       setShuffledOptions(perm)
       setQuestionIndex(data.questionIndex)
       setTotalQuestions(typeof data.totalQuestions === 'number' ? data.totalQuestions : 0)
@@ -159,6 +221,7 @@ const Game = () => {
     on('NEW_QUESTION', handleNewQuestion)
 
     const handleQuestionEnded = (data) => {
+      clearScoringTimers()
       setPhase(PHASES.REVEAL)
       setCorrectAnswer(data.correctAnswer)
       setCorrectSequence(data.correctSequence || null)
@@ -166,8 +229,88 @@ const Game = () => {
     }
     on('QUESTION_ENDED', handleQuestionEnded)
 
+    const handleScorePhase = (data) => {
+      clearScoringTimers()
+
+      const before = Array.isArray(data?.beforePlayers) ? data.beforePlayers : []
+      const after = Array.isArray(data?.afterPlayers) ? data.afterPlayers : []
+      const scoringMs = typeof data?.scoringTimeMs === 'number' ? data.scoringTimeMs : 5000
+      const hideAnimMs = 220
+
+      const afterById = {}
+      for (const p of after) {
+        const id = getPublicPlayerId(p)
+        if (!id) continue
+        afterById[id] = p
+      }
+      const beforeById = {}
+      for (const p of before) {
+        const id = getPublicPlayerId(p)
+        if (!id) continue
+        beforeById[id] = p
+      }
+
+      const beforeSorted = [...before].sort((a, b) => (b?.score || 0) - (a?.score || 0))
+      const changedIds = beforeSorted
+        .map((p) => getPublicPlayerId(p))
+        .filter(Boolean)
+        .filter((id) => (afterById[id]?.score ?? beforeById[id]?.score ?? 0) !== (beforeById[id]?.score ?? 0))
+
+      setPhase(PHASES.SCORING)
+      setTimeLeft(0)
+      setScoreOverlay({
+        visible: true,
+        hiding: false,
+        step: 'before',
+        changedIds,
+        displayPlayers: beforeSorted,
+        beforeById,
+        afterById,
+      })
+
+      // t=1s: apply score changes (keep current order)
+      scoringTimersRef.current.push(
+        setTimeout(() => {
+          setScoreOverlay((prev) => {
+            const next = prev.displayPlayers.map((p) => {
+              const id = getPublicPlayerId(p)
+              if (!id) return p
+              const afterP = prev.afterById[id]
+              return afterP ? { ...p, score: afterP.score } : p
+            })
+            return { ...prev, step: 'updated', displayPlayers: next }
+          })
+        }, 1000)
+      )
+
+      // t=2s: reorder by updated score
+      scoringTimersRef.current.push(
+        setTimeout(() => {
+          setScoreOverlay((prev) => {
+            const next = [...prev.displayPlayers].sort((a, b) => (b?.score || 0) - (a?.score || 0))
+            return { ...prev, step: 'reordered', displayPlayers: next }
+          })
+        }, 2000)
+      )
+
+      // start fade-out slightly before the end
+      scoringTimersRef.current.push(
+        setTimeout(() => {
+          setScoreOverlay((prev) => (prev.visible ? { ...prev, hiding: true } : prev))
+        }, Math.max(0, scoringMs - hideAnimMs))
+      )
+      scoringTimersRef.current.push(
+        setTimeout(() => {
+          setScoreOverlay((prev) => (prev.visible ? { ...prev, visible: false, hiding: false, step: 'idle' } : prev))
+        }, scoringMs)
+      )
+    }
+    on('SCORE_PHASE', handleScorePhase)
+
     const handleGameFinished = (data) => {
       refreshMe()
+      clearScoringTimers()
+      setScoreOverlay((prev) => (prev.visible ? { ...prev, visible: false, hiding: false, step: 'idle' } : prev))
       setPhase(PHASES.FINISHED)
       setLeaderboard((prev) =>
         data.leaderboard && data.leaderboard.length ? data.leaderboard : prev && prev.length ? prev : []
@@ -208,19 +351,38 @@ const Game = () => {
     }
     on('SESSION_TAKEN_OVER', handleSessionTakenOver)
 
+    const handleError = (err) => {
+      const msg = err?.message || err?.error || 'Ошибка'
+      if (String(msg).toLowerCase().includes('комната не найдена')) {
+        clearActiveGame()
+        showSnackbar('Комната не найдена', 'error')
+        navigate('/', { replace: true })
+        return
+      }
+      showSnackbar(msg, 'error')
+    }
+    on('ERROR', handleError)
+
+    const join = () =>
+      emit('JOIN_GAME', { gameId, playerId: user.id, player: user, clientSessionId: getClientSessionId() })
+    if (socket.connected) join()
+    on('connect', join)
+
 
     return () => {
       off('GAME_LOADING', handleGameLoading)
       off('NEW_QUESTION', handleNewQuestion)
       off('QUESTION_ENDED', handleQuestionEnded)
+      off('SCORE_PHASE', handleScorePhase)
       off('GAME_FINISHED', handleGameFinished)
       off('GAME_STATE', handleGameState)
       off('GAME_CLOSED', handleGameClosed)
       off('GAME_STARTED', handleGameStarted)
       off('SESSION_TAKEN_OVER', handleSessionTakenOver)
+      off('ERROR', handleError)
       off('connect', join)
     }
-  }, [socket, emit, on, off, gameId, user, navigate, leaderboard.length, revealDuration, refreshMe])
+  }, [socket, emit, on, off, gameId, gameIdParam, user, navigate, leaderboard.length, revealDuration, refreshMe])
 
   const tryReplay = async (kind) => {
     const el = kind === 'video' ? videoRef.current : audioRef.current
@@ -371,15 +533,15 @@ const Game = () => {
 
   if (phase === PHASES.FINISHED) {
     return (
-      <div className="max-w-[600px] w-full mx-auto space-y-6">
-        <div className="text-center">
+      <div className="w-full max-w-[600px] mx-auto flex-1 min-h-0 flex flex-col overflow-hidden pb-6">
+        <div className="text-center pt-2 pb-6">
           <Trophy className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
           <h1 className="text-4xl font-bold mb-2">Игра завершена!</h1>
         </div>
 
-        <div className="card glass-card shadow-2xl border border-base-300/60 w-full max-w-[600px] mx-auto">
-          <div className="card-body">
-            <div className="space-y-3">
+        <div className="card glass-card shadow-2xl border border-base-300/60 w-full flex-1 min-h-0">
+          <div className="card-body min-h-0">
+            <div className="scroll-mask flex-1 min-h-0 overflow-y-auto space-y-3 pr-1">
               {leaderboard.map((player, index) => (
                 <div
                   key={player.player.id}
@@ -416,7 +578,7 @@ const Game = () => {
           </div>
         </div>
 
-        <div className="text-center space-y-2">
+        <div className="text-center pt-6">
           <button
             className="btn btn-primary btn-lg rounded-full shadow-lg"
             onClick={() => {
@@ -460,9 +622,87 @@ const Game = () => {
     ? { isCorrect: myPlayer.isCorrect, answered: myPlayer.currentAnswer !== null && myPlayer.currentAnswer !== undefined }
     : null
   const totalPhaseTime = phase === PHASES.QUESTION ? questionDuration : phase === PHASES.REVEAL ? revealDuration : 0
+  const overlayScrollable = (scoreOverlay?.displayPlayers?.length || 0) > 8
 
   return (
     <div className="w-full max-w-[600px] mx-auto flex-1 min-h-0 flex flex-col items-stretch space-y-6 pb-8 overflow-y-auto">
+      {scoreOverlay.visible && (
+        <div
+          className={`fixed inset-0 z-50 flex items-center justify-center p-4 transition-opacity duration-200 ${
+            scoreOverlay.hiding ? 'opacity-0' : 'opacity-100'
+          }`}
+          aria-live="polite"
+        >
+          <div className="absolute inset-0 bg-black/60" />
+          <div className="relative w-full max-w-[600px] card glass-card shadow-2xl border border-base-300/60 overflow-visible">
+            <div className="absolute -top-4 left-6 px-4 py-2 rounded-full bg-[#e5d423] text-black text-sm font-bold uppercase pointer-pass">
+              Счёт
+            </div>
+            <div className="card-body pt-12 space-y-4">
+              <div className={`grid gap-2 sm:gap-3 ${overlayScrollable ? 'max-h-[70vh] overflow-y-auto pr-1' : ''}`}>
+                {scoreOverlay.displayPlayers.map((p, idx) => {
+                  const id = getPublicPlayerId(p)
+                  if (!id) return null
+                  const isSelf = id === user?.id
+                  const beforeScore = scoreOverlay.beforeById[id]?.score ?? p.score ?? 0
+                  const afterScore = scoreOverlay.afterById[id]?.score ?? p.score ?? 0
+                  const delta = afterScore - beforeScore
+                  const isChanged = scoreOverlay.changedIds.includes(id)
+                  return (
+                    <div
+                      key={id}
+                      ref={(el) => {
+                        if (el) scoreRowRefs.current.set(id, el)
+                        else scoreRowRefs.current.delete(id)
+                      }}
+                      className={`flex items-center gap-3 sm:gap-4 px-3 sm:px-4 py-3 sm:py-4 rounded-xl bg-base-200 border ${
+                        isSelf ? 'border-[#e5d423]' : 'border-[#3a4de6]'
+                      } ${!p.isOnline ? 'opacity-60 grayscale' : ''}`}
+                    >
+                      <span className="w-8 sm:w-10 text-center text-base sm:text-lg font-bold">#{idx + 1}</span>
+                      <div className="avatar">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary text-primary-content flex items-center justify-center">
+                          {p.player?.avatarUrl ? (
+                            <img src={p.player.avatarUrl} alt={p.player.username} className="rounded-full" />
+                          ) : (
+                            <span className="text-sm sm:text-base font-bold">{p.player?.username?.charAt(0) || 'U'}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-base sm:text-lg font-semibold truncate">
+                          {p.player?.username || p.player?.firstName || 'Игрок'}
+                        </div>
+                      </div>
+                      <div className="text-right min-w-[84px] sm:min-w-[110px]">
+                        <div
+                          className={`text-xl sm:text-2xl font-extrabold tabular-nums transition-transform duration-200 ${
+                            isChanged && scoreOverlay.step !== 'before' ? 'text-green-300' : 'text-[#e5d423]'
+                          } ${isChanged && scoreOverlay.step === 'updated' ? 'scale-110' : ''}`}
+                        >
+                          {p.score || 0}
+                        </div>
+                        <div className="h-5 text-xs sm:text-sm font-semibold tabular-nums text-green-300">
+                          {isChanged && scoreOverlay.step !== 'before' && delta > 0 ? `+${delta}` : '\u00A0'}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!currentQuestion && phase !== PHASES.LOADING && phase !== PHASES.FINISHED && (
+        <div className="card glass-card shadow-2xl border border-base-300/60 w-full max-w-[600px] mx-auto mt-3">
+          <div className="card-body text-center py-16">
+            <div className="text-2xl font-black">Вопрос загружается</div>
+            <div className="opacity-70 mt-2">Подождите пару секунд...</div>
+          </div>
+        </div>
+      )}
       {currentQuestion && phase !== PHASES.LOADING && (
         <div className="card glass-card shadow-2xl border border-base-300/60 w-full max-w-[600px] mx-auto relative overflow-visible mt-3">
 	          <div className="absolute -top-3 left-4 flex flex-wrap gap-2 pointer-pass">
@@ -688,7 +928,7 @@ const Game = () => {
         </div>
       )}
 
-      {players.length > 0 && phase !== PHASES.FINISHED && (
+      {features?.playersListInGame && players.length > 0 && phase !== PHASES.FINISHED && (
         <div className="card glass-card shadow-xl border border-base-300/60 w-full max-w-[600px] mx-auto relative overflow-visible">
           <div className="absolute -top-3 left-4 px-3 py-1 rounded-full bg-[#e5d423] text-black text-xs font-bold uppercase pointer-pass">
             Игроки: {players.length}

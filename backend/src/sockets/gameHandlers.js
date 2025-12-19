@@ -1,7 +1,16 @@
 import pkg from '@prisma/client'
 import jwt from 'jsonwebtoken'
 import { withMediaPlaceholders } from '../utils/media.js'
-import { deleteRoomState, ensurePlayer, getRoomState, listRooms, resetAnswers, roomToPublic } from '../utils/roomStore.js'
+import {
+  bumpBotTotalScore,
+  deleteRoomState,
+  ensurePlayer,
+  getRoomState,
+  listRooms,
+  resetAnswers,
+  roomToPublic,
+  touchRoom,
+} from '../utils/roomStore.js'
 import {
   DIFFICULTY_LABELS,
   DIFFICULTY_SCORE,
@@ -10,6 +19,8 @@ import {
   QUESTION_TIME_MS,
   RECONNECT_GRACE_MS,
   REVEAL_TIME_MS,
+  SCORING_TIME_MS,
+  ROOM_TTL_MS,
 } from '../utils/constants.js'
 
 const { PrismaClient } = pkg
@@ -34,6 +45,8 @@ const findActiveRoomHintForUser = (userId) => {
 }
 
 const questionTimers = new Map() // gameId -> timeout
+const botAnswerTimers = new Map() // gameId -> Set<timeout>
+let roomTtlCleanupStarted = false
 
 const parseBool = (value, defaultValue = true) => {
   if (value === undefined || value === null) return defaultValue
@@ -62,6 +75,8 @@ const featureDifficultySelection = () =>
   // Backward-compat: older env name used in some setups
   parseBool(process.env.FEATURE_QUESTION_RATING, false)
 
+const featureBots = () => parseBool(process.env.FEATURE_BOTS, false)
+
 const debugSessions = () => parseBool(process.env.DEBUG_SESSIONS, false)
 
 const labelFromPreset = (preset) => DIFFICULTY_LABELS[preset] || 'medium'
@@ -69,6 +84,13 @@ const labelFromPreset = (preset) => DIFFICULTY_LABELS[preset] || 'medium'
 const randomInt = (max) => Math.floor(Math.random() * max)
 
 const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5)
+
+const normalizeRoomCode = (value) => {
+  if (value === undefined || value === null) return null
+  const v = String(value).trim()
+  if (!v) return null
+  return v.toUpperCase()
+}
 
 const normalizePlayerId = (value) => {
   if (value === undefined || value === null) return null
@@ -93,7 +115,9 @@ const rejectAsTakenOver = (socket, gameId, playerId) => {
     // ignore
   }
   try {
-    socket.disconnect(true)
+    // Use namespace-level disconnect so client receives "io server disconnect"
+    // (and won't auto-reconnect), improving takeover UX reliability.
+    socket.disconnect(false)
   } catch {
     // ignore
   }
@@ -133,7 +157,9 @@ const disconnectSocketIds = (io, socketIds, payloadBase) => {
     }
     setTimeout(() => {
       try {
-        s.disconnect(true)
+        // Use namespace-level disconnect so client receives "io server disconnect"
+        // (and won't auto-reconnect), improving takeover UX reliability.
+        s.disconnect(false)
       } catch {
         // ignore
       }
@@ -150,11 +176,34 @@ const parseOptions = (options) => {
   }
 }
 
-const toPublicQuestion = (question) => {
+const toPublicQuestion = (question, payload = {}) => {
   const opts = parseOptions(question.options)
-  const q = withMediaPlaceholders({ ...question, options: opts })
+  const q = withMediaPlaceholders({ ...question, options: opts, ...payload })
   const { correctOption, correctSequence, ...rest } = q
   return rest
+}
+
+const shuffleIndices = (n) => {
+  const arr = Array.from({ length: n }, (_, i) => i)
+  for (let i = arr.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr
+}
+
+const getOrCreateOptionOrder = (room, question) => {
+  if (!question) return null
+  const qid = question.id
+  if (!room.questionOptionOrders) room.questionOptionOrders = new Map()
+  const existing = room.questionOptionOrders.get(qid)
+  if (Array.isArray(existing) && existing.length) return existing
+
+  const opts = parseOptions(question.options)
+  const n = Array.isArray(opts) ? opts.length : 0
+  const order = n > 1 ? shuffleIndices(n) : Array.from({ length: n }, (_, i) => i)
+  room.questionOptionOrders.set(qid, order)
+  return order
 }
 
 const pickQuestionsRandom = (all) => {
@@ -269,33 +318,168 @@ const clearQuestionTimer = (gameId) => {
   }
 }
 
-const emitGameState = async (io, room) => {
-  const userIds = Array.from(room.players.keys())
-  const users = await prisma.user.findMany({
-    where: { id: { in: userIds } },
-    select: {
-      id: true,
-      username: true,
-      firstName: true,
-      lastName: true,
-      avatarUrl: true,
-      totalScore: true,
-    },
-  })
+const clearBotAnswerTimers = (gameId) => {
+  const timers = botAnswerTimers.get(gameId)
+  if (!timers) return
+  for (const t of timers) clearTimeout(t)
+  botAnswerTimers.delete(gameId)
+}
+
+const addBotAnswerTimer = (gameId, t) => {
+  if (!botAnswerTimers.has(gameId)) botAnswerTimers.set(gameId, new Set())
+  botAnswerTimers.get(gameId).add(t)
+}
+
+const parseCorrectSequence = (question) => {
+  try {
+    if (!question) return []
+    if (Array.isArray(question.correctSequence)) return question.correctSequence.map((v) => Number(v))
+    const parsed = JSON.parse(question.correctSequence || '[]')
+    return Array.isArray(parsed) ? parsed.map((v) => Number(v)) : []
+  } catch {
+    return []
+  }
+}
+
+const submitAnswerInternal = async (io, room, pid, { questionId, answerIndex, sequence } = {}) => {
+  const player = room?.players?.get?.(pid)
+  if (!room || !player) return null
+  const currentQuestion = room.questions?.[room.currentQuestion]
+  if (!currentQuestion || currentQuestion.id !== questionId) return null
+
+  const correct = isAnswerCorrect(currentQuestion, { answerIndex, sequence })
+  player.currentAnswer = sequence ?? answerIndex
+  player.isCorrect = correct
+
+  await emitGameState(io, room)
+
+  const allAnswered = Array.from(room.players.values()).every((p) => p.currentAnswer !== null && p.currentAnswer !== undefined)
+  if (allAnswered) {
+    await endQuestion(io, room)
+  }
+  return correct
+}
+
+const scheduleBotAnswers = (io, room, questionIndex) => {
+  if (!featureBots()) return
+  if (!room || room.status !== 'active') return
+  const question = room.questions?.[questionIndex]
+  if (!question) return
+
+  clearBotAnswerTimers(room.id)
+
+  const bots = Array.from(room.players.values()).filter((p) => p?.isBot)
+  if (bots.length === 0) return
+
+  const opts = parseOptions(question.options)
+  const n = Array.isArray(opts) ? opts.length : 0
+  if (n <= 0) return
+
+  const minDelay = 700
+  const maxDelay = Math.max(minDelay, QUESTION_TIME_MS - 2500)
+
+  for (const bot of bots) {
+    const botId = bot.playerId
+    const delay = minDelay + Math.floor(Math.random() * (maxDelay - minDelay + 1))
+    const t = setTimeout(async () => {
+      try {
+        const r = getRoomState(room.id)
+        if (!r || r.status !== 'active') return
+        if (r.currentQuestion !== questionIndex) return
+        const q = r.questions?.[questionIndex]
+        if (!q || q.id !== question.id) return
+        const entry = r.players.get(botId)
+        if (!entry || !entry.isBot) return
+        if (entry.currentAnswer !== null && entry.currentAnswer !== undefined) return
+
+        if (q.type === 'sequence') {
+          const correctSeq = parseCorrectSequence(q)
+          const chooseCorrect = correctSeq.length === n && Math.random() < 0.2
+          const seq = chooseCorrect ? correctSeq : shuffleIndices(n)
+          await submitAnswerInternal(io, r, botId, { questionId: q.id, sequence: seq })
+        } else {
+          const correctOpt = typeof q.correctOption === 'number' ? q.correctOption : null
+          const chooseCorrect = correctOpt !== null && Math.random() < 0.25
+          let answerIndex = Math.floor(Math.random() * n)
+          if (chooseCorrect) answerIndex = correctOpt
+          else if (correctOpt !== null && n > 1 && answerIndex === correctOpt) {
+            answerIndex = (answerIndex + 1) % n
+          }
+          await submitAnswerInternal(io, r, botId, { questionId: q.id, answerIndex })
+        }
+      } catch {
+        // ignore bot failures
+      }
+    }, delay)
+    addBotAnswerTimer(room.id, t)
+  }
+}
+
+const getHumanEntries = (room) => Array.from(room?.players?.values?.() || []).filter((p) => !p?.isBot)
+
+const getRealPlayerIds = (room) =>
+  getHumanEntries(room)
+    .map((p) => p.playerId)
+    .filter((id) => typeof id === 'number' && id > 0)
+
+const buildUsersById = async (room) => {
+  const userIds = getRealPlayerIds(room)
+  const users = userIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, username: true, firstName: true, lastName: true, avatarUrl: true, totalScore: true },
+      })
+    : []
   const byId = Object.fromEntries(users.map((u) => [u.id, u]))
+  // add bots from room state
+  for (const p of Array.from(room?.players?.values?.() || [])) {
+    if (p?.isBot && p?.botProfile && typeof p.playerId === 'number') {
+      byId[p.playerId] = p.botProfile
+    }
+  }
+  return byId
+}
+
+const emitGameState = async (io, room) => {
+  touchRoom(room)
+  const byId = await buildUsersById(room)
   io.to(room.id).emit('GAME_STATE', roomToPublic(room, byId))
 }
 
-const sendQuestion = (io, room, index) => {
+const buildQuestionPayload = (room, index) => {
   const question = room.questions[index]
-  if (!question) return
-  io.to(room.id).emit('NEW_QUESTION', {
-    question: toPublicQuestion(question),
+  if (!question) return null
+  const originalOptions = parseOptions(question.options)
+  const order = getOrCreateOptionOrder(room, question)
+  const shuffledOptions =
+    Array.isArray(order) && order.length === originalOptions.length
+      ? order.map((i) => originalOptions[i])
+      : originalOptions
+  return {
+    question: toPublicQuestion(question, { options: shuffledOptions, optionOrder: order || null }),
     questionIndex: index,
     totalQuestions: room.totalQuestions || room.questions.length || QUESTIONS_PER_GAME,
     questionTimeMs: QUESTION_TIME_MS,
     revealTimeMs: REVEAL_TIME_MS,
-  })
+  }
+}
+
+const sendQuestionToSocket = (socket, room, index) => {
+  const payload = buildQuestionPayload(room, index)
+  if (!payload) return null
+  socket.emit('NEW_QUESTION', payload)
+  return payload
+}
+
+const sendQuestion = (io, room, index) => {
+  touchRoom(room)
+  const payload = buildQuestionPayload(room, index)
+  if (!payload) return null
+  io.to(room.id).emit('NEW_QUESTION', payload)
+  if (featureBots()) {
+    scheduleBotAnswers(io, room, index)
+  }
+  return payload
 }
 
 const updateScores = async (room, question) => {
@@ -344,6 +528,8 @@ const applyTopicScores = async (room) => {
   const topicId = room.topicId
   const ops = []
   for (const player of room.players.values()) {
+    if (player?.isBot) continue
+    if (typeof player?.playerId !== 'number' || player.playerId <= 0) continue
     ops.push(
       prisma.userTopicScore.upsert({
         where: { userId_topicId: { userId: player.playerId, topicId } },
@@ -355,7 +541,7 @@ const applyTopicScores = async (room) => {
   await prisma.$transaction(ops)
 
   // Пересчитываем totalScore как сумму по темам
-  const userIds = Array.from(room.players.keys())
+  const userIds = getRealPlayerIds(room)
   for (const uid of userIds) {
     const agg = await prisma.userTopicScore.aggregate({
       where: { userId: uid },
@@ -370,37 +556,40 @@ const applyTopicScores = async (room) => {
 
 const finishGame = async (io, room) => {
   clearQuestionTimer(room.id)
+  clearBotAnswerTimers(room.id)
   room.status = 'finished'
   room.finishedAt = new Date()
+  touchRoom(room)
   await persistRoomFinish(room)
   await applyTopicScores(room)
+  // update in-memory bot totals so "totalScore" looks consistent
+  for (const p of Array.from(room.players.values())) {
+    if (!p?.isBot) continue
+    const nextTotal = bumpBotTotalScore(p.playerId, p.score || 0)
+    if (p.botProfile) p.botProfile.totalScore = nextTotal
+  }
   logEvent('room.game.finish', { gameId: room.id, finishedAt: room.finishedAt?.toISOString?.() })
 
-  const userIds = Array.from(room.players.keys())
-  const users = await prisma.user.findMany({
-    where: { id: { in: userIds } },
-    select: { id: true, username: true, firstName: true, lastName: true, avatarUrl: true, totalScore: true },
-  })
-  const byId = Object.fromEntries(users.map((u) => [u.id, u]))
+  const byId = await buildUsersById(room)
   const leaderboard = Array.from(room.players.values())
     .map((p) => ({
       ...p,
-      player: byId[p.playerId] || { id: p.playerId },
+      player: byId[p.playerId] || p.botProfile || { id: p.playerId },
     }))
     .sort((a, b) => b.score - a.score)
 
   io.to(room.id).emit('GAME_FINISHED', { leaderboard })
+  io.to(room.id).emit('GAME_STATE', roomToPublic(room, byId))
 }
 
 const endQuestion = async (io, room) => {
   if (room.status === 'finished') return
   clearQuestionTimer(room.id)
+  clearBotAnswerTimers(room.id)
   const qIdx = room.currentQuestion
   const question = room.questions[qIdx]
   if (!question) return
 
-  await updateScores(room, question)
-  await emitGameState(io, room)
   let correctSeq = null
   if (question.type === 'sequence') {
     try {
@@ -431,10 +620,68 @@ const endQuestion = async (io, room) => {
     }
   }
 
-  setTimeout(proceed, REVEAL_TIME_MS)
+	  const startScoring = async () => {
+	    if (room.status === 'finished') return
+	    const byId = await buildUsersById(room)
+
+	    const beforePlayers = roomToPublic(room, byId).gamePlayers || []
+	    await updateScores(room, question)
+	    const afterPlayers = roomToPublic(room, byId).gamePlayers || []
+
+    io.to(room.id).emit('SCORE_PHASE', {
+      questionIndex: qIdx,
+      totalQuestions: room.totalQuestions || room.questions.length || QUESTIONS_PER_GAME,
+      scoringTimeMs: SCORING_TIME_MS,
+      beforePlayers,
+      afterPlayers,
+    })
+
+    await emitGameState(io, room)
+
+    setTimeout(proceed, SCORING_TIME_MS)
+  }
+
+  setTimeout(startScoring, REVEAL_TIME_MS)
 }
 
 export const setupSocketHandlers = (io) => {
+  if (!roomTtlCleanupStarted) {
+    roomTtlCleanupStarted = true
+    const intervalMs = 30_000
+    const tick = async () => {
+      try {
+        const now = Date.now()
+        for (const room of listRooms()) {
+          const lastAt =
+            room?.lastActivityAt instanceof Date
+              ? room.lastActivityAt.getTime()
+              : room?.finishedAt instanceof Date
+              ? room.finishedAt.getTime()
+              : room?.createdAt instanceof Date
+              ? room.createdAt.getTime()
+              : null
+          if (!lastAt) continue
+          if (now - lastAt < ROOM_TTL_MS) continue
+          const gameId = room.id
+          logEvent('room.closed', { gameId, reason: 'ttl_expired' })
+          try {
+            io.to(gameId).emit('GAME_CLOSED')
+          } catch {
+            // ignore
+          }
+          clearQuestionTimer(gameId)
+          clearBotAnswerTimers(gameId)
+          deleteRoomState(gameId)
+        }
+      } catch {
+        // ignore ttl cleanup failures
+      }
+    }
+    const t = setInterval(tick, intervalMs)
+    // don't keep the process alive just for TTL cleanup
+    t.unref?.()
+  }
+
   io.on('connection', (socket) => {
     logEvent('socket.connect', {
       socketId: socket.id,
@@ -533,7 +780,8 @@ export const setupSocketHandlers = (io) => {
 
     socket.on('JOIN_GAME', async ({ gameId, playerId, player, clientSessionId }) => {
       try {
-        const room = getRoomState(gameId)
+        const gid = normalizeRoomCode(gameId)
+        const room = gid ? getRoomState(gid) : null
         if (!room) return socket.emit('ERROR', { message: 'Комната не найдена' })
         const pid = normalizePlayerId(socket.data?.authUserId ?? playerId ?? player?.id)
         const user = pid ? await prisma.user.findUnique({ where: { id: pid } }) : null
@@ -542,12 +790,14 @@ export const setupSocketHandlers = (io) => {
         const sid = normalizeClientSessionId(clientSessionId)
         if (!sid) return socket.emit('ERROR', { message: 'Missing clientSessionId' })
 
-        socket.join(gameId)
-        socket.data.gameId = gameId
+        socket.join(gid)
+        socket.data.gameId = gid
         socket.data.playerId = pid
         socket.data.clientSessionId = sid
 
         const entry = ensurePlayer(room, pid)
+        const isDuplicateJoin =
+          entry.clientSessionId === sid && entry.sockets?.has?.(socket.id) && socket.rooms?.has?.(gid)
         if (entry.disconnectTimer) {
           clearTimeout(entry.disconnectTimer)
           entry.disconnectTimer = null
@@ -556,7 +806,7 @@ export const setupSocketHandlers = (io) => {
         const prevSid = entry.clientSessionId
         if (debugSessions()) {
           console.log('[sessions] JOIN_GAME', {
-            gameId,
+            gameId: gid,
             playerId: pid,
             sid,
             prevSid,
@@ -564,8 +814,28 @@ export const setupSocketHandlers = (io) => {
           })
         }
 
+        if (isDuplicateJoin) {
+          // Client sometimes re-sends JOIN_GAME (e.g. UI remount/reconnect). Avoid log spam and unnecessary takeover logic.
+          await emitGameState(io, room)
+          // Important: when transitioning Room -> Game, the client may miss the room broadcast NEW_QUESTION.
+          // Re-send current question to this socket only so UI renders immediately without requiring a refresh.
+          if (room.status === 'active') {
+            sendQuestionToSocket(socket, room, room.currentQuestion)
+          } else if (room.status === 'finished') {
+            const byId = await buildUsersById(room)
+            const leaderboard = Array.from(room.players.values())
+              .map((p) => ({
+                ...p,
+                player: byId[p.playerId] || p.botProfile || { id: p.playerId },
+              }))
+              .sort((a, b) => b.score - a.score)
+            socket.emit('GAME_FINISHED', { leaderboard })
+          }
+          return
+        }
+
         if (prevSid && prevSid !== sid) {
-          logEvent('session.takeover.room', { gameId, playerId: pid, fromSessionId: prevSid, toSessionId: sid })
+        logEvent('session.takeover.room', { gameId: gid, playerId: pid, fromSessionId: prevSid, toSessionId: sid })
           const oldSocketIds = Array.from(entry.sockets || [])
           entry.sockets?.clear?.()
           entry.clientSessionId = sid
@@ -581,7 +851,9 @@ export const setupSocketHandlers = (io) => {
             }
             setTimeout(() => {
               try {
-                oldSocket.disconnect(true)
+                // Use namespace-level disconnect so client receives "io server disconnect"
+                // (and won't auto-reconnect), improving takeover UX reliability.
+                oldSocket.disconnect(false)
               } catch {
                 // ignore
               }
@@ -594,12 +866,19 @@ export const setupSocketHandlers = (io) => {
 
         await emitGameState(io, room)
 
-        logEvent('room.join', { gameId, playerId: pid, sockets: entry.sockets?.size || 0, status: room.status })
+        logEvent('room.join', { gameId: gid, playerId: pid, sockets: entry.sockets?.size || 0, status: room.status })
 
         if (room.status === 'active') {
-          sendQuestion(io, room, room.currentQuestion)
+          sendQuestionToSocket(socket, room, room.currentQuestion)
         } else if (room.status === 'finished') {
-          socket.emit('GAME_FINISHED', { leaderboard: [] })
+          const byId = await buildUsersById(room)
+          const leaderboard = Array.from(room.players.values())
+            .map((p) => ({
+              ...p,
+              player: byId[p.playerId] || p.botProfile || { id: p.playerId },
+            }))
+            .sort((a, b) => b.score - a.score)
+          socket.emit('GAME_FINISHED', { leaderboard })
         }
       } catch (error) {
         console.error('Join game error:', error)
@@ -608,11 +887,12 @@ export const setupSocketHandlers = (io) => {
     })
 
     socket.on('PLAYER_READY', async ({ gameId, playerId, isReady }) => {
-      const room = getRoomState(gameId)
+      const gid = normalizeRoomCode(gameId)
+      const room = gid ? getRoomState(gid) : null
       if (!room) return socket.emit('ERROR', { message: 'Комната не найдена' })
       const pid = normalizePlayerId(socket.data?.playerId ?? playerId)
       if (!pid) return socket.emit('ERROR', { message: 'Missing playerId' })
-      const entry = getAuthorizedPlayerEntry(room, socket, gameId, pid)
+      const entry = getAuthorizedPlayerEntry(room, socket, gid, pid)
       if (!entry) return
       entry.isReady = !!isReady
       await emitGameState(io, room)
@@ -620,18 +900,20 @@ export const setupSocketHandlers = (io) => {
 
     socket.on('START_GAME', async ({ gameId }) => {
       try {
-        const room = getRoomState(gameId)
+        const gid = normalizeRoomCode(gameId)
+        const room = gid ? getRoomState(gid) : null
         if (!room) return socket.emit('ERROR', { message: 'Комната не найдена' })
         if (room.status !== 'waiting') return
 
         const pid = normalizePlayerId(socket.data?.playerId)
         if (!pid) return socket.emit('ERROR', { message: "Missing playerId" })
-        const entry = getAuthorizedPlayerEntry(room, socket, gameId, pid)
+        const entry = getAuthorizedPlayerEntry(room, socket, gid, pid)
         if (!entry) return
         if (room.organizerId !== pid) return socket.emit('ERROR', { message: 'Only organizer can start' })
 
         room.questions = await buildQuestions(room)
         room.questionsIds = room.questions.map((q) => q.id)
+        room.questionOptionOrders = new Map()
         room.totalQuestions = room.questions.length || QUESTIONS_PER_GAME
         room.status = 'active'
         room.startedAt = new Date()
@@ -639,11 +921,11 @@ export const setupSocketHandlers = (io) => {
         resetAnswers(room)
 
         await persistRoomStart(room)
-        io.to(gameId).emit('GAME_STARTED')
-        logEvent('room.game.start', { gameId, topicId: room.topicId, difficulty: room.difficulty })
+        io.to(gid).emit('GAME_STARTED')
+        logEvent('room.game.start', { gameId: gid, topicId: room.topicId, difficulty: room.difficulty })
         sendQuestion(io, room, 0)
         const t = setTimeout(() => endQuestion(io, room), QUESTION_TIME_MS)
-        questionTimers.set(gameId, t)
+        questionTimers.set(gid, t)
         await emitGameState(io, room)
       } catch (error) {
         console.error('Start game error:', error)
@@ -653,30 +935,18 @@ export const setupSocketHandlers = (io) => {
 
     socket.on('SUBMIT_ANSWER', async ({ gameId, questionId, answerIndex, sequence, playerId }) => {
       try {
-        const room = getRoomState(gameId)
+        const gid = normalizeRoomCode(gameId)
+        const room = gid ? getRoomState(gid) : null
         if (!room) return socket.emit('ERROR', { message: 'Комната не найдена' })
         const pid = normalizePlayerId(socket.data?.playerId ?? playerId)
         if (!pid) return socket.emit('ERROR', { message: 'Нет playerId' })
-        const player = getAuthorizedPlayerEntry(room, socket, gameId, pid)
+        const player = getAuthorizedPlayerEntry(room, socket, gid, pid)
         if (!player) return
 
         const currentQuestion = room.questions[room.currentQuestion]
         if (!currentQuestion || currentQuestion.id !== questionId) return
-
-        const correct = isAnswerCorrect(currentQuestion, { answerIndex, sequence })
-        player.currentAnswer = sequence ?? answerIndex
-        player.isCorrect = correct
-
-        await emitGameState(io, room)
-
-        const allAnswered = Array.from(room.players.values()).every(
-          (p) => p.currentAnswer !== null && p.currentAnswer !== undefined
-        )
-        if (allAnswered) {
-          await endQuestion(io, room)
-        }
-
-        socket.emit('ANSWER_RECEIVED', { isCorrect: correct })
+        const correct = await submitAnswerInternal(io, room, pid, { questionId, answerIndex, sequence })
+        socket.emit('ANSWER_RECEIVED', { isCorrect: !!correct })
       } catch (error) {
         console.error('Submit answer error:', error)
         socket.emit('ERROR', { message: 'Не удалось принять ответ' })
@@ -685,7 +955,8 @@ export const setupSocketHandlers = (io) => {
 
     socket.on('LEAVE_GAME', async ({ gameId, playerId }) => {
       try {
-        const room = getRoomState(gameId)
+        const gid = normalizeRoomCode(gameId)
+        const room = gid ? getRoomState(gid) : null
         if (!room) return
         const pid = normalizePlayerId(socket.data?.playerId ?? playerId)
         const entry = room.players.get(pid)
@@ -694,24 +965,26 @@ export const setupSocketHandlers = (io) => {
         const removed = entry && (!entry.sockets || entry.sockets.size === 0)
         if (removed) room.players.delete(pid)
 
-        logEvent('room.leave', { gameId, playerId: pid, removed, playersLeft: room.players.size })
+        logEvent('room.leave', { gameId: gid, playerId: pid, removed, playersLeft: room.players.size })
 
         try {
-          socket.leave(gameId)
-          if (socket.data?.gameId === gameId) socket.data.gameId = null
+          socket.leave(gid)
+          if (socket.data?.gameId === gid) socket.data.gameId = null
         } catch {
           // ignore
         }
 
+        const humansLeft = getHumanEntries(room).length
         if (removed && room.organizerId === pid) {
-          const first = room.players.values().next().value
-          room.organizerId = first?.playerId || null
+          const firstHuman = getHumanEntries(room)[0]
+          room.organizerId = firstHuman?.playerId || null
         }
-        if (room.players.size === 0) {
-          clearQuestionTimer(gameId)
-          deleteRoomState(gameId)
-          io.to(gameId).emit('GAME_CLOSED')
-          logEvent('room.closed', { gameId, reason: 'no_players' })
+        if (humansLeft === 0 && !(room?.hasBots && room?.players?.size > 0)) {
+          clearQuestionTimer(gid)
+          clearBotAnswerTimers(gid)
+          deleteRoomState(gid)
+          io.to(gid).emit('GAME_CLOSED')
+          logEvent('room.closed', { gameId: gid, reason: 'no_players' })
           return
         }
         await emitGameState(io, room)
@@ -720,19 +993,33 @@ export const setupSocketHandlers = (io) => {
       }
     })
 
-    socket.on('JOIN_SPECTATOR', ({ spectateToken }) => {
-      const room = getRoomState(spectateToken)
-      if (!room) {
-        socket.emit('ERROR', { message: 'Комната не найдена' })
-        return
-      }
-      socket.join(room.id)
-      socket.data.spectateGameId = room.id
-      emitGameState(io, room)
-      if (room.status === 'active') {
-        sendQuestion(io, room, room.currentQuestion)
-      } else if (room.status === 'finished') {
-        socket.emit('GAME_FINISHED', { leaderboard: [] })
+    socket.on('JOIN_SPECTATOR', async ({ spectateToken } = {}) => {
+      try {
+        const gid = normalizeRoomCode(spectateToken)
+        const room = gid ? getRoomState(gid) : null
+        if (!room) {
+          socket.emit('ERROR', { message: 'Комната не найдена' })
+          return
+        }
+        socket.join(room.id)
+        socket.data.spectateGameId = room.id
+        touchRoom(room)
+        const byId = await buildUsersById(room)
+        socket.emit('GAME_STATE', roomToPublic(room, byId))
+        if (room.status === 'active') {
+          sendQuestionToSocket(socket, room, room.currentQuestion)
+        } else if (room.status === 'finished') {
+          const leaderboard = Array.from(room.players.values())
+            .map((p) => ({
+              ...p,
+              player: byId[p.playerId] || p.botProfile || { id: p.playerId },
+            }))
+            .sort((a, b) => b.score - a.score)
+          socket.emit('GAME_FINISHED', { leaderboard })
+        }
+      } catch (error) {
+        console.error('JOIN_SPECTATOR error:', error)
+        socket.emit('ERROR', { message: 'Не удалось подключить зрителя' })
       }
     })
 
@@ -755,8 +1042,9 @@ export const setupSocketHandlers = (io) => {
         }
       }
 
-      if (!gameId || !playerId) return
-      const room = getRoomState(gameId)
+      const gid = normalizeRoomCode(gameId)
+      if (!gid || !playerId) return
+      const room = getRoomState(gid)
       if (!room) return
       const entry = room.players.get(playerId)
       if (entry?.sockets) {
@@ -773,26 +1061,28 @@ export const setupSocketHandlers = (io) => {
           room.organizerId = nextHost?.playerId || room.organizerId
         }
 
-        logEvent('room.player.offline', { gameId, playerId, organizerId: room.organizerId })
+        logEvent('room.player.offline', { gameId: gid, playerId, organizerId: room.organizerId })
 
         entry.disconnectTimer = setTimeout(async () => {
-          const r = getRoomState(gameId)
+          const r = getRoomState(gid)
           if (!r) return
           const e = r.players.get(playerId)
           if (!e) return
           if (e.sockets && e.sockets.size > 0) return
           // still offline after grace period => remove from room
           r.players.delete(playerId)
-          logEvent('room.player.kicked', { gameId, playerId, reason: 'reconnect_timeout' })
+          logEvent('room.player.kicked', { gameId: gid, playerId, reason: 'reconnect_timeout' })
           if (r.organizerId === playerId) {
-            const first = r.players.values().next().value
-            r.organizerId = first?.playerId || null
+            const firstHuman = getHumanEntries(r)[0]
+            r.organizerId = firstHuman?.playerId || null
           }
-          if (r.players.size === 0) {
-            clearQuestionTimer(gameId)
-            deleteRoomState(gameId)
-            io.to(gameId).emit('GAME_CLOSED')
-            logEvent('room.closed', { gameId, reason: 'no_players' })
+          const humansLeft = getHumanEntries(r).length
+          if (humansLeft === 0 && !(r?.hasBots && r?.players?.size > 0)) {
+            clearQuestionTimer(gid)
+            clearBotAnswerTimers(gid)
+            deleteRoomState(gid)
+            io.to(gid).emit('GAME_CLOSED')
+            logEvent('room.closed', { gameId: gid, reason: 'no_players' })
             return
           }
           await emitGameState(io, r)

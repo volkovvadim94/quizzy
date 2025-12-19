@@ -23,6 +23,7 @@ export function ConfigProvider({ children }) {
       import.meta?.env?.VITE_FEATURE_DIFFICULTY_SELECTION ?? import.meta?.env?.VITE_FEATURE_QUESTION_RATING,
       false
     ),
+    playersListInGame: parseBool(import.meta?.env?.VITE_FEATURE_PLAYERS_LIST_IN_GAME, true),
   })
   const [loading, setLoading] = useState(true)
 

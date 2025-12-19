@@ -18,21 +18,28 @@ const difficultyMeta = {
 }
 
 const Room = () => {
-  const { gameId } = useParams()
+  const { gameId: gameIdParam } = useParams()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const { socket, emit, on, off } = useSocket()
+
+  const gameId = String(gameIdParam || '').toUpperCase()
 
   const [game, setGame] = useState(null)
   const [players, setPlayers] = useState([])
   const [loading, setLoading] = useState(true)
   const [isReady, setIsReady] = useState(false)
   const [snackbar, setSnackbar] = useState({ message: '', type: 'success', visible: false })
+  const [spectateInfoOpen, setSpectateInfoOpen] = useState(false)
   const snackTimer = useRef(null)
 
   useEffect(() => {
+    if (gameIdParam && gameIdParam !== gameId) {
+      navigate(`/room/${gameId}`, { replace: true })
+      return
+    }
     loadGame()
-  }, [gameId, user])
+  }, [gameId, user, gameIdParam])
 
   useEffect(() => {
     if (!socket || !gameId || !user) return
@@ -76,6 +83,12 @@ const Room = () => {
 
     const handleError = (err) => {
       const msg = err?.message || err?.error || 'Ошибка'
+      if (String(msg).toLowerCase().includes('комната не найдена')) {
+        clearActiveGame()
+        showSnackbar('Комната не найдена', 'error')
+        navigate('/', { replace: true })
+        return
+      }
       showSnackbar(msg, 'error')
     }
 
@@ -166,6 +179,23 @@ const Room = () => {
   const canStart = isOrganizer && isReady && totalPlayers > 0
   const topicLabel = game?.topicName || game?.topic || ''
 
+  const copySpectateLink = async () => {
+    try {
+      await navigator.clipboard.writeText(spectateUrl)
+      setSpectateInfoOpen(true)
+    } catch {
+      showSnackbar('Не удалось скопировать', 'error')
+    }
+  }
+
+  if (authLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-64">
+        <span className="loading loading-spinner loading-lg"></span>
+      </div>
+    )
+  }
+
   if (!user) {
     return (
       <div className="flex items-center justify-center flex-1">
@@ -234,6 +264,22 @@ const Room = () => {
     }
   }
 
+  const openSpectateLink = () => {
+    const url = spectateUrl
+    if (!url) return
+
+    if (isTelegramWebApp()) {
+      showSnackbar('Откройте ссылку на трансляцию в обычном браузере на другом устройстве', 'success')
+      return
+    }
+
+    try {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } catch {
+      // ignore
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
       {/* Комната */}
@@ -267,13 +313,6 @@ const Room = () => {
                   title={isTelegramWebApp() ? 'Поделиться ссылкой' : 'Скопировать ссылку для входа'}
                 >
                   <Share2 size={16} />
-                </button>
-                <button
-                  onClick={() => copyToClipboard(spectateUrl, 'Ссылка для просмотра скопирована')}
-                  className="w-11 h-11 rounded-xl bg-[#2b2f3d] active:bg-[#353b4c] transition-colors flex items-center justify-center text-white"
-                  title="Скопировать ссылку для зрителей"
-                >
-                  <Tv size={16} />
                 </button>
               </div>
             </div>
@@ -319,6 +358,12 @@ const Room = () => {
               >
                 <Play size={18} />
                 Старт
+              </button>
+            )}
+            {isOrganizer && (
+              <button onClick={copySpectateLink} className="btn btn-secondary gap-2 px-6 rounded-full w-full">
+                <Tv size={18} />
+                Режим трансляции
               </button>
             )}
           </div>
@@ -391,6 +436,34 @@ const Room = () => {
           </div>
         </div>
       </div>
+
+      {spectateInfoOpen ? (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+          <div className="card glass-card shadow-2xl border border-base-300/60 w-full max-w-md">
+            <div className="card-body space-y-4 text-center">
+              <div className="text-xl font-black">Ссылка скопирована</div>
+              <a
+                href={spectateUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sky-400 font-semibold break-all underline underline-offset-4"
+                onClick={(e) => {
+                  e.preventDefault()
+                  openSpectateLink()
+                }}
+              >
+                {spectateUrl}
+              </a>
+              <div className="opacity-80">
+                Откройте её на устройстве с большим экраном, чтобы все участники могли наблюдать за игрой.
+              </div>
+              <button className="btn btn-primary w-full rounded-full" onClick={() => setSpectateInfoOpen(false)}>
+                Понятно
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <Snackbar message={snackbar.message} type={snackbar.type} visible={snackbar.visible} />
     </div>

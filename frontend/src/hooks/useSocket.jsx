@@ -30,8 +30,9 @@ const buildCandidates = () => {
   const apiOrigin = envApiUrl ? envApiUrl.replace(/\/api\/?$/, '') : null
   const origin = typeof window !== 'undefined' ? window.location.origin : null
 
-  // Try explicit socket url first, then api origin, then current origin
-  const urls = uniq([envSocketUrl, apiOrigin, origin])
+  // Prefer same-origin sockets first so in-memory room state matches HTTP (important when rooms live only in one process).
+  // Then fall back to explicit env URL (if any) and api origin.
+  const urls = uniq([origin, envSocketUrl, apiOrigin])
 
   // Different deployments might proxy socket.io under these paths:
   const paths = ['/socket.io', '/api/socket.io']
@@ -120,7 +121,8 @@ export const SocketProvider = ({ children }) => {
       transports: ['polling', 'websocket'],
       upgrade: true,
 
-      withCredentials: true,
+      // We don't rely on cookies for auth; keeping credentials off avoids CORS issues on cross-port deployments (e.g. :8443 -> :443).
+      withCredentials: false,
 
       reconnection: true,
       reconnectionAttempts: 10,

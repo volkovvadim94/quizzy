@@ -24,6 +24,7 @@ import questionRoutes from './src/routes/questions.js';
 import configRoutes from './src/routes/config.js';
 
 import { setupSocketHandlers } from './src/sockets/gameHandlers.js';
+import { logStartupInfo } from './src/utils/startupInfo.js';
 
 const app = express();
 const server = createServer(app);
@@ -67,5 +68,10 @@ app.get('*', (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 server.listen(PORT, () => {
-  console.log(`🚀 QUIZZY Backend running on port ${PORT}`);
+  logStartupInfo({
+    port: PORT,
+    corsOrigin: io?.opts?.cors?.origin,
+    socketPingIntervalMs: io?.opts?.pingInterval,
+    socketPingTimeoutMs: io?.opts?.pingTimeout,
+  });
 });

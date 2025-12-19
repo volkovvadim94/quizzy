@@ -18,5 +18,9 @@ export const RANDOM_DISTRIBUTION = {
 
 export const QUESTION_TIME_MS = 15000
 export const REVEAL_TIME_MS = 3000
+export const SCORING_TIME_MS = 5000
 
 export const RECONNECT_GRACE_MS = 10000
+
+// Force-close any room after this TTL to avoid stale sessions.
+export const ROOM_TTL_MS = 10 * 60 * 1000
