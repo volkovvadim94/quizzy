@@ -35,7 +35,7 @@ Quizzy — party‑квиз, который запускается в Telegram M
 ### Стек
 - Frontend: React + Vite + Tailwind + daisyUI, Socket.IO client
 - Backend: Node.js + Express + Socket.IO, Prisma
-- DB: SQLite (в репо — `backend/prisma/dev.db`)
+- DB: SQLite (локально: `backend/prisma/dev.db`, создаётся через `npx prisma db push` + `npm run db:seed`, файл не хранится в git)
 
 ### Как это собрано
 - В продакшене backend раздаёт и API, и собранный фронт.

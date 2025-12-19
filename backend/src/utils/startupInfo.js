@@ -35,6 +35,7 @@ export const logStartupInfo = ({
   socketPingTimeoutMs,
 } = {}) => {
   const env = process.env.NODE_ENV || 'development'
+  const appEnv = process.env.APP_ENV
 
   // Feature flags
   const difficultySelection =
@@ -52,7 +53,7 @@ export const logStartupInfo = ({
 
   const lines = [
     `🚀 QUIZZY Backend started`,
-    `- env: ${env}`,
+    `- env: ${env}${appEnv ? ` (APP_ENV=${appEnv})` : ''}`,
     `- pid: ${process.pid}`,
     `- port: ${port ?? process.env.PORT ?? 'n/a'}`,
     `- cors.origin: ${corsOrigin ?? 'n/a'}`,

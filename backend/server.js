@@ -6,15 +6,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Load backend/.env automatically (Node 20.6+); safe no-op if missing.
-try {
-  if (typeof process.loadEnvFile === 'function') {
-    process.loadEnvFile(path.join(__dirname, '.env'));
-  }
-} catch {
-  // ignore
-}
-
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 
