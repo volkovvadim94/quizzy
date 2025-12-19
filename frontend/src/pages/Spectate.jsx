@@ -2,7 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import { useParams } from 'react-router-dom'
 import { useSocket } from '../hooks/useSocket'
 import { gameAPI } from '../utils/api'
-import { Trophy, Volume2, VolumeX, RotateCcw } from 'lucide-react'
+import { CheckCircle2, Trophy, Volume2, VolumeX, RotateCcw } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { buildTelegramMiniAppUrl } from '../utils/telegram'
 
@@ -57,6 +57,7 @@ const Spectate = () => {
   const [game, setGame] = useState(null)
   const [currentQuestion, setCurrentQuestion] = useState(null)
   const [correctAnswer, setCorrectAnswer] = useState(null)
+  const [correctSequence, setCorrectSequence] = useState(null)
   const [timeLeft, setTimeLeft] = useState(0)
   const [phase, setPhase] = useState(PHASES.WAITING)
   const [phaseDuration, setPhaseDuration] = useState(0)
@@ -75,16 +76,27 @@ const Spectate = () => {
   const [mediaVolume, setMediaVolume] = useState(0.9) // 0..1
   const [mediaMuted, setMediaMuted] = useState(false)
   const scoringTimersRef = useRef([])
+  const sequenceRevealTimersRef = useRef([])
   const revealDurationRef = useRef(3)
   const freezePlayersRef = useRef(false)
   const pendingPlayersRef = useRef(null)
   const [scoringStep, setScoringStep] = useState('idle') // idle | before | updated | reordered
   const [scoreDeltas, setScoreDeltas] = useState({})
   const [playersView, setPlayersView] = useState([])
+  const [sequenceReveal, setSequenceReveal] = useState({ showNumbers: false, reordered: false, highlightCount: 0 })
+  const [finishedLeaderboard, setFinishedLeaderboard] = useState([])
+  const finishedLeaderboardRef = useRef([])
+  const [finishedOnlineById, setFinishedOnlineById] = useState({})
+  const [playersGridEl, setPlayersGridEl] = useState(null)
+  const [playersGridBox, setPlayersGridBox] = useState({ width: 0, height: 0, isLg: false })
+
+  const resetSequenceReveal = () => setSequenceReveal({ showNumbers: false, reordered: false, highlightCount: 0 })
 
   const clearScoringTimers = () => {
     for (const t of scoringTimersRef.current) clearTimeout(t)
     scoringTimersRef.current = []
+    for (const t of sequenceRevealTimersRef.current) clearTimeout(t)
+    sequenceRevealTimersRef.current = []
     freezePlayersRef.current = false
     pendingPlayersRef.current = null
   }
@@ -136,6 +148,16 @@ const Spectate = () => {
         setCurrentQuestion(null)
         setTimeLeft(0)
         setPhaseDuration(0)
+        const lb = response.data.gamePlayers || []
+        setFinishedLeaderboard(lb)
+        finishedLeaderboardRef.current = lb
+        const online = {}
+        for (const p of lb) {
+          const id = getPublicPlayerId(p)
+          if (!id) continue
+          online[id] = p?.isOnline !== false
+        }
+        setFinishedOnlineById(online)
       }
     } catch (err) {
       console.error('Spectate load error', err)
@@ -161,6 +183,8 @@ const Spectate = () => {
  	      setQuestionIndex(data.questionIndex)
  	      setTotalQuestions(data.totalQuestions || 0)
 		      setCorrectAnswer(null)
+          setCorrectSequence(null)
+          resetSequenceReveal()
 		      setMediaHint({ audio: false, video: false })
 		      const qd = Math.max(1, Math.round((data.questionTimeMs || 15000) / 1000))
 		      const rd = Math.max(1, Math.round((data.revealTimeMs || 3000) / 1000))
@@ -176,9 +200,8 @@ const Spectate = () => {
 
     const handleQuestionEnded = (data) => {
       clearScoringTimers()
-      if (data && typeof data.correctAnswer === 'number') {
-        setCorrectAnswer(data.correctAnswer)
-      }
+      setCorrectAnswer(data && typeof data.correctAnswer === 'number' ? data.correctAnswer : null)
+      setCorrectSequence(data && Array.isArray(data.correctSequence) ? data.correctSequence : null)
       setPhase(PHASES.REVEAL)
       setPhaseDuration(revealDurationRef.current)
       setTimeLeft(revealDurationRef.current)
@@ -186,14 +209,43 @@ const Spectate = () => {
     }
 
     const handleGameState = (data) => {
+      const status = data.status || 'waiting'
       const nextPlayers = data.gamePlayers || []
+
+      // Finished screen should be a snapshot: keep the final leaderboard order,
+      // but mark players offline if they disconnect/leave afterwards.
+      if (status === 'finished') {
+        const present = new Map()
+        for (const p of nextPlayers) {
+          const id = getPublicPlayerId(p)
+          if (!id) continue
+          present.set(id, p?.isOnline !== false)
+        }
+        setFinishedOnlineById((prev) => {
+          const next = { ...prev }
+          const snapshot = finishedLeaderboardRef.current || []
+          for (const sp of snapshot) {
+            const id = getPublicPlayerId(sp)
+            if (!id) continue
+            if (present.has(id)) next[id] = present.get(id)
+            else next[id] = false
+          }
+          return next
+        })
+        setGameStatus('finished')
+        setPhase(PHASES.FINISHED)
+        setTimeLeft(0)
+        setPhaseDuration(0)
+        return
+      }
+
       if (freezePlayersRef.current) {
         pendingPlayersRef.current = nextPlayers
       } else {
         setPlayers(nextPlayers)
       }
-      setGameStatus(data.status || 'waiting')
-      if (data.status === 'waiting') {
+      setGameStatus(status)
+      if (status === 'waiting') {
         setPhase(PHASES.WAITING)
         setTimeLeft(0)
         setPhaseDuration(0)
@@ -291,7 +343,19 @@ const Spectate = () => {
       setTimeLeft(0)
       setCurrentQuestion(null)
       setCorrectAnswer(null)
-      setPlayers(data.leaderboard || [])
+      setCorrectSequence(null)
+      resetSequenceReveal()
+      const lb = data.leaderboard || []
+      setPlayers(lb)
+      setFinishedLeaderboard(lb)
+      finishedLeaderboardRef.current = lb
+      const online = {}
+      for (const p of lb) {
+        const id = getPublicPlayerId(p)
+        if (!id) continue
+        online[id] = p?.isOnline !== false
+      }
+      setFinishedOnlineById(online)
       setPhase(PHASES.FINISHED)
       setPhaseDuration(0)
       setScoringStep('idle')
@@ -313,6 +377,9 @@ const Spectate = () => {
       setScoringStep('idle')
       setScoreDeltas({})
       setPlayersView([])
+      setCorrectAnswer(null)
+      setCorrectSequence(null)
+      resetSequenceReveal()
     }
 
 	    on('NEW_QUESTION', handleNewQuestion)
@@ -403,6 +470,41 @@ const Spectate = () => {
     }
   }, [gameStatus])
 
+  // Sequence reveal: show target order numbers, reorder cards, then highlight in correct order.
+  useEffect(() => {
+    if (phase !== PHASES.REVEAL) return
+    if (gameStatus !== 'active') return
+    if (!currentQuestion || currentQuestion.type !== 'sequence') return
+    if (!Array.isArray(correctSequence) || correctSequence.length === 0) return
+
+    for (const t of sequenceRevealTimersRef.current) clearTimeout(t)
+    sequenceRevealTimersRef.current = []
+
+    setSequenceReveal({ showNumbers: true, reordered: false, highlightCount: 0 })
+
+    const totalMs = Math.max(300, Math.round(revealDurationRef.current * 1000))
+    const reorderAtMs = Math.min(450, Math.max(250, Math.round(totalMs * 0.18)))
+    const highlightStartMs = Math.min(totalMs - 50, reorderAtMs + 280)
+    const steps = Math.max(1, correctSequence.length)
+    const remainingMs = Math.max(0, totalMs - highlightStartMs)
+    const stepMs = Math.max(180, Math.floor(remainingMs / steps))
+
+    sequenceRevealTimersRef.current.push(
+      setTimeout(() => setSequenceReveal((prev) => ({ ...prev, reordered: true })), reorderAtMs)
+    )
+
+    for (let i = 1; i <= steps; i += 1) {
+      sequenceRevealTimersRef.current.push(
+        setTimeout(() => setSequenceReveal((prev) => ({ ...prev, highlightCount: i })), highlightStartMs + (i - 1) * stepMs)
+      )
+    }
+
+    return () => {
+      for (const t of sequenceRevealTimersRef.current) clearTimeout(t)
+      sequenceRevealTimersRef.current = []
+    }
+  }, [phase, gameStatus, currentQuestion?.id, correctSequence])
+
   const optionOrder = useMemo(() => {
     const opts = parseOptions(currentQuestion)
     const order = Array.isArray(currentQuestion?.optionOrder) ? currentQuestion.optionOrder : null
@@ -411,6 +513,58 @@ const Spectate = () => {
     }
     return opts.map((text, originalIndex) => ({ text, originalIndex }))
   }, [currentQuestion])
+
+  const isSequenceQuestion = currentQuestion?.type === 'sequence'
+  const hasSequenceSolution = isSequenceQuestion && Array.isArray(correctSequence) && correctSequence.length > 0
+  // Keep the final "sequence reveal" view (order + greens) until the next question arrives.
+  const inSequencePresentation = hasSequenceSolution && (phase === PHASES.REVEAL || phase === PHASES.SCORING)
+
+  const correctPosByOriginalIndex = useMemo(() => {
+    const m = new Map()
+    if (!Array.isArray(correctSequence)) return m
+    for (let i = 0; i < correctSequence.length; i += 1) {
+      const raw = correctSequence[i]
+      const id = typeof raw === 'number' ? raw : Number(raw)
+      if (!Number.isFinite(id)) continue
+      m.set(id, i)
+    }
+    return m
+  }, [Array.isArray(correctSequence) ? correctSequence.join('|') : ''])
+
+  const letterByOriginalIndex = useMemo(() => {
+    const m = new Map()
+    for (let i = 0; i < optionOrder.length; i += 1) {
+      const id = optionOrder[i]?.originalIndex
+      if (id === undefined || id === null) continue
+      const n = typeof id === 'number' ? id : Number(id)
+      if (!Number.isFinite(n)) continue
+      m.set(n, String.fromCharCode(65 + i))
+    }
+    return m
+  }, [optionOrder.map((o) => o?.originalIndex).join('|')])
+
+  const displayOptionOrder = useMemo(() => {
+    if (!inSequencePresentation || !sequenceReveal.reordered) return optionOrder
+    const byId = new Map()
+    for (const opt of optionOrder) {
+      const id = typeof opt?.originalIndex === 'number' ? opt.originalIndex : Number(opt?.originalIndex)
+      if (!Number.isFinite(id)) continue
+      byId.set(id, opt)
+    }
+
+    const ordered = []
+    for (const raw of correctSequence) {
+      const id = typeof raw === 'number' ? raw : Number(raw)
+      if (!Number.isFinite(id)) continue
+      const opt = byId.get(id)
+      if (!opt) continue
+      ordered.push(opt)
+      byId.delete(id)
+    }
+    // append leftovers (shouldn't happen normally, but keeps UI stable on malformed data)
+    for (const opt of byId.values()) ordered.push(opt)
+    return ordered
+  }, [optionOrder, inSequencePresentation, sequenceReveal.reordered, Array.isArray(correctSequence) ? correctSequence.join('|') : ''])
   const playersSorted = useMemo(
     () => (Array.isArray(players) ? [...players].sort((a, b) => (b?.score || 0) - (a?.score || 0)) : []),
     [players]
@@ -421,19 +575,19 @@ const Spectate = () => {
     return playersSorted
   }, [playersSorted, scoringStep, playersView])
 
-  const playerRowRefs = useRef(new Map())
-  const prevRowTops = useRef(new Map())
+  const optionRowRefs = useRef(new Map())
+  const prevOptionRowTops = useRef(new Map())
 
   useLayoutEffect(() => {
     const nextTops = new Map()
-    for (const [id, el] of playerRowRefs.current.entries()) {
+    for (const [id, el] of optionRowRefs.current.entries()) {
       if (!el) continue
       nextTops.set(id, el.getBoundingClientRect().top)
     }
 
-    for (const [id, el] of playerRowRefs.current.entries()) {
+    for (const [id, el] of optionRowRefs.current.entries()) {
       if (!el) continue
-      const prevTop = prevRowTops.current.get(id)
+      const prevTop = prevOptionRowTops.current.get(id)
       const nextTop = nextTops.get(id)
       if (prevTop === undefined || nextTop === undefined) continue
       const delta = prevTop - nextTop
@@ -442,14 +596,139 @@ const Spectate = () => {
       el.style.transition = 'transform 0s'
       el.style.transform = `translateY(${delta}px)`
       requestAnimationFrame(() => {
+        if (!optionRowRefs.current.get(id)) return
+        el.style.transition = 'transform 650ms ease'
+        el.style.transform = ''
+      })
+    }
+
+    prevOptionRowTops.current = nextTops
+  }, [displayOptionOrder.map((o) => String(o?.originalIndex ?? '')).join('|')])
+
+  const playerRowRefs = useRef(new Map())
+  const prevRowRects = useRef(new Map())
+
+  useLayoutEffect(() => {
+    const nextRects = new Map()
+    for (const [id, el] of playerRowRefs.current.entries()) {
+      if (!el) continue
+      const r = el.getBoundingClientRect()
+      nextRects.set(id, { top: r.top, left: r.left })
+    }
+
+    for (const [id, el] of playerRowRefs.current.entries()) {
+      if (!el) continue
+      const prev = prevRowRects.current.get(id)
+      const next = nextRects.get(id)
+      if (!prev || !next) continue
+      const dx = prev.left - next.left
+      const dy = prev.top - next.top
+      if (!dx && !dy) continue
+
+      el.style.transition = 'transform 0s'
+      el.style.transform = `translate(${dx}px, ${dy}px)`
+      requestAnimationFrame(() => {
         if (!playerRowRefs.current.get(id)) return
         el.style.transition = 'transform 850ms ease'
         el.style.transform = ''
       })
     }
 
-    prevRowTops.current = nextTops
+    prevRowRects.current = nextRects
   }, [renderPlayers.map((p) => `${getPublicPlayerId(p) ?? 'x'}:${p?.score ?? 0}`).join('|')])
+
+  useLayoutEffect(() => {
+    const mql = window.matchMedia?.('(min-width: 1024px)')
+    const el = playersGridEl
+    if (!el) {
+      setPlayersGridBox((prev) => ({ ...prev, isLg: !!mql?.matches }))
+      return
+    }
+
+    let raf = 0
+    const update = () => {
+      if (raf) cancelAnimationFrame(raf)
+      raf = requestAnimationFrame(() => {
+        setPlayersGridBox({
+          width: el.clientWidth || 0,
+          height: el.clientHeight || 0,
+          isLg: !!mql?.matches,
+        })
+      })
+    }
+
+    update()
+    let ro = null
+    try {
+      ro = new ResizeObserver(update)
+      ro.observe(el)
+    } catch {
+      // ignore
+    }
+    const onMql = () => update()
+    try {
+      mql?.addEventListener?.('change', onMql)
+    } catch {
+      // ignore
+    }
+    window.addEventListener?.('resize', update)
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      try {
+        ro?.disconnect?.()
+      } catch {
+        // ignore
+      }
+      try {
+        mql?.removeEventListener?.('change', onMql)
+      } catch {
+        // ignore
+      }
+      window.removeEventListener?.('resize', update)
+    }
+  }, [playersGridEl])
+
+  const isFinished = gameStatus === 'finished'
+  const playersCount = renderPlayers.length
+
+  const playersLayout = useMemo(() => {
+    if (isFinished) return { cols: 1, gap: 8, rowHeight: 56, tier: 'normal' }
+    const n = Math.max(0, Number(playersCount) || 0)
+    const height = Math.max(0, Number(playersGridBox.height) || 0)
+    const isLgView = !!playersGridBox.isLg
+    const candidates = isLgView ? [1, 2, 3] : [1]
+    const minRowByCols = { 1: 58, 2: 46, 3: 36 }
+    const gapByCols = { 1: 10, 2: 8, 3: 6 }
+
+    let chosen = { cols: 1, gap: 10, rowHeight: 56 }
+    for (const cols of candidates) {
+      const rows = Math.max(1, Math.ceil(n / cols))
+      const gap = gapByCols[cols] ?? 8
+      const rowHeight = rows > 1 ? (height - gap * (rows - 1)) / rows : height
+      chosen = { cols, gap, rowHeight }
+      if (!height) break
+      if (rowHeight >= (minRowByCols[cols] ?? 40)) break
+    }
+
+    const rh = Math.max(20, Math.floor(chosen.rowHeight || 0))
+    const tier = rh >= 66 ? 'normal' : rh >= 56 ? 'compact' : rh >= 44 ? 'ultra' : 'micro'
+    return { cols: chosen.cols, gap: chosen.gap, rowHeight: rh, tier }
+  }, [isFinished, playersCount, playersGridBox.height, playersGridBox.isLg])
+
+  const questionWidthClass = isFinished
+    ? 'lg:basis-full lg:max-w-full'
+    : playersLayout.cols === 3
+    ? 'lg:basis-[52%] lg:max-w-[52%]'
+    : playersLayout.cols === 2
+    ? 'lg:basis-[62%] lg:max-w-[62%]'
+    : 'lg:basis-[74%] lg:max-w-[74%]'
+
+  const playersWidthClass =
+    playersLayout.cols === 3
+      ? 'lg:basis-[48%] lg:max-w-[48%]'
+      : playersLayout.cols === 2
+      ? 'lg:basis-[38%] lg:max-w-[38%]'
+      : 'lg:basis-[26%] lg:max-w-[26%]'
 
   if (loading) {
     return (
@@ -510,33 +789,25 @@ const Spectate = () => {
   const joinUrl = game?.id ? `${window.location.origin}/${game.id}` : ''
   const telegramJoinUrl = game?.id ? buildTelegramMiniAppUrl(game.id) : ''
   const qrValue = telegramJoinUrl || joinUrl
-  const showDelta = scoringStep !== 'idle' && scoringStep !== 'before'
-  const isFinished = gameStatus === 'finished'
+  const showDelta = scoringStep === 'updated'
 
   return (
     <div className="w-full h-full px-6 lg:px-10 pt-10 pb-10">
       <div className="w-full h-full">
         <div className="flex flex-col lg:flex-row gap-8 items-stretch h-full">
           <div
-            className={`w-full ${isFinished ? 'lg:basis-full lg:max-w-full' : 'lg:basis-[70%] lg:max-w-[70%]'} lg:order-2 flex flex-col min-h-0`}
+            className={`w-full ${questionWidthClass} lg:order-2 flex flex-col min-h-0`}
           >
-            <div className="card glass-card shadow-2xl border border-base-300/60 relative overflow-visible flex-1 h-full min-h-0">
-              <div className="absolute -top-3 left-4 flex flex-wrap gap-2 pointer-pass">
-                <div className="px-3 py-1 rounded-full bg-[#e5d423] text-black text-xs font-bold uppercase pointer-pass max-w-[70vw] lg:max-w-[820px] truncate">
-                  {game?.topic || game?.topicName || 'Тема'}
-                </div>
-                {difficultyChip ? (
-                  <div className={`badge gap-2 p-3 rounded-xl font-bold ${difficultyChip.badge}`}>{difficultyChip.label}</div>
-                ) : null}
-              </div>
-
-              <div className="card-body pt-10 flex flex-col h-full min-h-0">
-                <div
-                  className="card shadow-xl border border-base-300/60 relative overflow-visible w-full"
-                  style={{ background: '#11192a' }}
-                >
+            <div
+              className={`card shadow-2xl border border-base-300/60 relative overflow-visible flex-1 h-full min-h-0 ${
+                isFinished ? 'overflow-hidden' : ''
+              }`}
+              style={{ background: '#11192a' }}
+            >
+              {!isFinished ? (
+                <div className="absolute -top-3 left-4 flex flex-wrap gap-2 pointer-pass">
                   {gameStatus === 'active' ? (
-                    <div className="absolute -top-3 left-4 flex flex-wrap gap-2 pointer-pass">
+                    <>
                       {primaryChipText ? (
                         <div className="px-3 py-1 rounded-full bg-[#e5d423] text-black text-xs font-bold uppercase pointer-pass">
                           {primaryChipText}
@@ -547,55 +818,74 @@ const Spectate = () => {
                           {questionDifficultyChip.label}
                         </div>
                       ) : null}
-                    </div>
-                  ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <div className="px-3 py-1 rounded-full bg-[#e5d423] text-black text-xs font-bold uppercase pointer-pass max-w-[70vw] lg:max-w-[820px] truncate">
+                        {game?.topic || game?.topicName || 'Тема'}
+                      </div>
+                      {difficultyChip ? (
+                        <div className={`badge gap-2 p-3 rounded-xl font-bold ${difficultyChip.badge}`}>
+                          {difficultyChip.label}
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              ) : null}
 
-                  <div className="card-body pt-10 flex flex-col min-h-0">
+              <div className="card-body pt-10 flex flex-col h-full min-h-0">
                   {isFinished ? (
                     <>
-                      <div className="text-center pt-2 pb-6">
+                      <div className="text-center pt-2 pb-6 shrink-0">
                         <Trophy className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
                         <h1 className="text-4xl lg:text-5xl font-black mb-2">Игра завершена!</h1>
                         <div className="opacity-70 text-lg">Можно закрыть вкладку</div>
                       </div>
 
-                      <div className="scroll-mask overflow-y-auto space-y-3 pr-1 max-h-[70vh]">
-                        {playersSorted.map((player, index) => (
-                          <div
-                            key={player?.player?.id ?? player?.playerId ?? index}
-                            className={`flex items-center gap-4 p-4 rounded-lg ${
-                              index === 0
-                                ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white'
-                                : index === 1
-                                ? 'bg-gradient-to-r from-gray-500 to-slate-600 text-white'
-                                : index === 2
-                                ? 'bg-gradient-to-r from-amber-700 to-amber-800 text-white'
-                                : 'bg-[#0f1626] border border-base-300/70'
-                            } ${player?.isOnline === false ? 'opacity-70 grayscale' : ''}`}
-                          >
-                            <div className="w-10 h-10 rounded-full bg-black/20 border border-white/10 flex items-center justify-center font-black text-lg tabular-nums">
-                              {index + 1}
-                            </div>
-                            <div className="avatar">
-                              <div className="w-12 h-12 rounded-full bg-primary text-primary-content flex items-center justify-center overflow-hidden">
-                                {player?.player?.avatarUrl ? (
-                                  <img src={player.player.avatarUrl} alt={player.player.username} className="rounded-full" />
-                                ) : (
-                                  <span className="text-lg font-bold">{player?.player?.username?.charAt(0) || 'U'}</span>
-                                )}
+                      <div className="scroll-mask flex-1 min-h-0 overflow-y-auto pr-1">
+                        <div className="w-full max-w-[760px] mx-auto space-y-3 pb-1">
+                          {(finishedLeaderboard.length ? finishedLeaderboard : playersSorted).map((player, index) => {
+                            const id = getPublicPlayerId(player)
+                            const online = id ? finishedOnlineById?.[id] : player?.isOnline !== false
+                            return (
+                            <div
+                              key={player?.player?.id ?? player?.playerId ?? index}
+                              className={`w-full flex items-center gap-4 p-4 rounded-lg ${
+                                index === 0
+                                  ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white'
+                                  : index === 1
+                                  ? 'bg-gradient-to-r from-gray-500 to-slate-600 text-white'
+                                  : index === 2
+                                  ? 'bg-gradient-to-r from-amber-700 to-amber-800 text-white'
+                                  : 'bg-[#0f1626] border border-[#3a4de6]/60'
+                              } ${online === false ? 'opacity-70 grayscale' : ''}`}
+                            >
+                              <div className="w-10 h-10 rounded-full bg-black/20 border border-[#3a4de6]/60 flex items-center justify-center font-black text-lg tabular-nums">
+                                {index + 1}
                               </div>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="font-semibold text-lg truncate">
-                                {player?.player?.username ||
-                                  `${player?.player?.firstName || ''} ${player?.player?.lastName || ''}`.trim() ||
-                                  'User'}
+                              <div className="avatar">
+                                <div className="w-12 h-12 rounded-full bg-primary text-primary-content flex items-center justify-center overflow-hidden">
+                                  {player?.player?.avatarUrl ? (
+                                    <img src={player.player.avatarUrl} alt={player.player.username} className="rounded-full" />
+                                  ) : (
+                                    <span className="text-lg font-bold">{player?.player?.username?.charAt(0) || 'U'}</span>
+                                  )}
+                                </div>
                               </div>
-                              <div className="text-sm opacity-90">Общий рейтинг: {player?.player?.totalScore ?? 0}</div>
+                              <div className="flex-1 min-w-0">
+                                <div className="font-semibold text-lg truncate">
+                                  {player?.player?.username ||
+                                    `${player?.player?.firstName || ''} ${player?.player?.lastName || ''}`.trim() ||
+                                    'User'}
+                                </div>
+                                <div className="text-sm opacity-90">Общий рейтинг: {player?.player?.totalScore ?? 0}</div>
+                              </div>
+                              <div className="text-2xl font-black tabular-nums">{player?.score ?? 0}</div>
                             </div>
-                            <div className="text-2xl font-black tabular-nums">{player?.score ?? 0}</div>
-                          </div>
-                        ))}
+                            )
+                          })}
+                        </div>
                       </div>
                     </>
                   ) : gameStatus === 'active' ? (
@@ -726,30 +1016,54 @@ const Spectate = () => {
                       </h2>
 
                       <div className="grid gap-4 mt-8">
-                        {optionOrder.map((opt, index) => {
-                          const isCorrect = correctAnswer !== null && correctAnswer === opt.originalIndex
-                          const isDimmed = correctAnswer !== null && !isCorrect
-                          const letter = String.fromCharCode(65 + index)
+                        {displayOptionOrder.map((opt, displayIndex) => {
+                          const rawId = opt?.originalIndex
+                          const originalIndex = typeof rawId === 'number' ? rawId : Number(rawId)
+                          const hasOriginal = Number.isFinite(originalIndex)
+                          const stableId = hasOriginal ? String(originalIndex) : String(displayIndex)
 
-                          const base =
-                            correctAnswer === null
-                              ? 'bg-base-200 border-base-300/60 text-white shadow-md'
-                              : isCorrect
+                          const correctPos = inSequencePresentation && hasOriginal ? correctPosByOriginalIndex.get(originalIndex) : undefined
+                          const orderNumber = correctPos !== undefined ? correctPos + 1 : null
+                          const isSeqHighlighted =
+                            inSequencePresentation && correctPos !== undefined && correctPos < (sequenceReveal?.highlightCount || 0)
+
+                          const isCorrect =
+                            !inSequencePresentation && correctAnswer !== null && hasOriginal && Number(correctAnswer) === originalIndex
+                          const isDimmed = !inSequencePresentation && correctAnswer !== null && !isCorrect
+
+                          const letter = hasOriginal ? letterByOriginalIndex.get(originalIndex) || String.fromCharCode(65 + displayIndex) : String.fromCharCode(65 + displayIndex)
+
+                          const base = inSequencePresentation
+                            ? isSeqHighlighted
                               ? 'bg-green-700 border-green-500 text-white shadow-md'
-                              : 'bg-base-200 border-base-300/60 text-white shadow-sm'
+                              : 'bg-base-200 border-base-300/60 text-white shadow-md'
+                            : correctAnswer === null
+                            ? 'bg-base-200 border-base-300/60 text-white shadow-md'
+                            : isCorrect
+                            ? 'bg-green-700 border-green-500 text-white shadow-md'
+                            : 'bg-base-200 border-base-300/60 text-white shadow-sm'
 
                           return (
                             <div
-                              key={index}
-                              className={`w-full px-7 py-5 rounded-2xl border transition-colors ${base} ${
+                              key={stableId}
+                              ref={(el) => {
+                                if (el) optionRowRefs.current.set(stableId, el)
+                                else optionRowRefs.current.delete(stableId)
+                              }}
+                              className={`w-full px-7 py-5 rounded-2xl border transition-colors duration-200 will-change-transform ${base} ${
                                 isDimmed ? 'opacity-70' : ''
                               }`}
                             >
-                              <div className="flex items-center justify-center gap-4">
+                              <div className="flex items-center gap-4">
                                 <span className="w-10 h-10 rounded-full bg-black/20 border border-white/10 flex items-center justify-center font-black text-lg">
                                   {letter}
                                 </span>
-                                <span className="text-xl font-semibold">{opt.text}</span>
+                                <span className="text-xl font-semibold flex-1 min-w-0 text-center break-words">{opt.text}</span>
+                                {inSequencePresentation && sequenceReveal?.showNumbers && orderNumber !== null ? (
+                                  <span className="w-10 h-10 rounded-full bg-black/20 border border-white/10 flex items-center justify-center font-black text-lg tabular-nums">
+                                    {orderNumber}
+                                  </span>
+                                ) : null}
                               </div>
                             </div>
                           )
@@ -763,10 +1077,10 @@ const Spectate = () => {
                     </div>
                   )
                   ) : (
-                    <div className="text-center py-16">
-                      {gameStatus === 'waiting' && joinUrl ? (
-                        <div className="max-w-lg mx-auto">
-                          <div className="text-3xl font-black">Ожидание игроков</div>
+                      <div className="text-center py-16">
+                        {gameStatus === 'waiting' && joinUrl ? (
+                          <div className="w-full max-w-4xl mx-auto">
+                            <div className="text-3xl font-black">Ожидание игроков</div>
                           <div className="opacity-70 mt-2 text-lg">Сканируй QR-код, чтобы подключиться к комнате</div>
 
                           <div className="mt-8 flex justify-center">
@@ -778,7 +1092,9 @@ const Spectate = () => {
                           <div className="mt-6 text-3xl font-black">
                             Код комнаты: <span className="tracking-widest">{game?.id}</span>
                           </div>
-                          <div className="mt-2 text-2xl font-semibold opacity-80 break-all">{telegramJoinUrl || joinUrl}</div>
+                          <div className="mt-2 text-2xl font-semibold opacity-80 whitespace-nowrap overflow-x-auto scroll-mask">
+                            {telegramJoinUrl || joinUrl}
+                          </div>
                         </div>
                       ) : (
                         <>
@@ -788,23 +1104,33 @@ const Spectate = () => {
                       )}
                     </div>
                   )}
-                  </div>
-                </div>
               </div>
-              </div>
+            </div>
           </div>
 
           {!isFinished ? (
-          <div className="w-full lg:basis-[30%] lg:max-w-[30%] lg:order-1 flex flex-col min-h-0">
+          <div
+            className={`w-full ${playersWidthClass} lg:order-1 flex flex-col min-h-0`}
+          >
             <div className="card glass-card shadow-xl border border-base-300/60 w-full relative overflow-visible flex-1 h-full min-h-0">
               <div className="absolute -top-3 left-4 px-3 py-1 rounded-full bg-[#e5d423] text-black text-xs font-bold uppercase pointer-pass">
                 Игроки: {renderPlayers.length}
               </div>
               <div className="card-body pt-8 flex flex-col min-h-0">
-                <div className="scroll-mask grid gap-2 pr-1 flex-1 min-h-0 overflow-y-auto">
+                <div
+                  ref={setPlayersGridEl}
+                  className="grid pr-1 flex-1 min-h-0 overflow-hidden"
+                  style={{
+                    gridTemplateColumns: `repeat(${playersLayout.cols}, minmax(0, 1fr))`,
+                    gridAutoRows: playersGridBox.height ? `${playersLayout.rowHeight}px` : undefined,
+                    gap: `${playersLayout.gap}px`,
+                  }}
+                >
                   {renderPlayers.map((p, idx) => {
                     const id = getPublicPlayerId(p)
                     const delta = id ? scoreDeltas[id] : 0
+                    const hasAnswered = p?.currentAnswer !== null && p?.currentAnswer !== undefined
+                    const isReadyState = gameStatus === 'active' ? hasAnswered : !!p?.isReady
                     return (
                     <div
                       key={p?.player?.id ?? p?.playerId ?? idx}
@@ -813,31 +1139,102 @@ const Spectate = () => {
                         if (el) playerRowRefs.current.set(rid, el)
                         else playerRowRefs.current.delete(rid)
                       }}
-                      className={`flex items-center gap-3 px-4 py-4 rounded-xl bg-base-200 border border-[#3a4de6] will-change-transform ${
+                      className={`h-full flex items-center gap-3 overflow-hidden ${
+                        playersLayout.tier === 'micro'
+                          ? 'px-2 py-1.5'
+                          : playersLayout.tier === 'ultra'
+                          ? 'px-2 py-2'
+                          : playersLayout.tier === 'compact'
+                          ? 'px-3 py-3'
+                          : 'px-4 py-4'
+                      } rounded-xl bg-base-200 border border-[#3a4de6] will-change-transform ${
                         p?.isOnline === false ? 'opacity-60 grayscale' : ''
                       }`}
                     >
-                      <span className="w-7 h-7 rounded-full bg-black/20 border border-white/10 flex items-center justify-center text-sm font-bold tabular-nums">
+                      <span
+                        className={`rounded-full bg-black/20 border border-[#3a4de6]/60 flex items-center justify-center font-black tabular-nums ${
+                          playersLayout.tier === 'micro'
+                            ? 'w-5 h-5 text-[10px]'
+                            : playersLayout.tier === 'ultra'
+                            ? 'w-6 h-6 text-xs'
+                            : playersLayout.tier === 'compact'
+                            ? 'w-7 h-7 text-sm'
+                            : 'w-8 h-8 text-base'
+                        }`}
+                      >
                         {idx + 1}
                       </span>
                       <div className="avatar">
-                        <div className="w-11 h-11 rounded-full bg-primary text-primary-content flex items-center justify-center overflow-hidden">
+                        <div
+                          className={`rounded-full bg-primary text-primary-content flex items-center justify-center overflow-hidden ${
+                            playersLayout.tier === 'micro'
+                              ? 'w-7 h-7'
+                              : playersLayout.tier === 'ultra'
+                              ? 'w-8 h-8'
+                              : playersLayout.tier === 'compact'
+                              ? 'w-9 h-9'
+                              : 'w-11 h-11'
+                          }`}
+                        >
                           {p?.player?.avatarUrl ? (
                             <img src={p.player.avatarUrl} alt={p?.player?.username || 'player'} className="rounded-full" />
                           ) : (
-                            <span className="text-sm font-bold">{p?.player?.username?.charAt(0) || 'U'}</span>
+                            <span
+                              className={`${
+                                playersLayout.tier === 'micro' ? 'text-[10px]' : playersLayout.tier === 'ultra' ? 'text-xs' : 'text-sm'
+                              } font-bold`}
+                            >
+                              {p?.player?.username?.charAt(0) || 'U'}
+                            </span>
                           )}
                         </div>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold truncate text-base">
+                        <div
+                          className={`font-semibold truncate ${
+                            playersLayout.tier === 'micro' ? 'text-xs' : playersLayout.tier === 'ultra' ? 'text-sm' : 'text-base'
+                          }`}
+                        >
                           {p?.player?.username || `${p?.player?.firstName || ''} ${p?.player?.lastName || ''}`.trim() || 'User'}
                         </div>
                       </div>
-                      <div className="text-right min-w-[84px]">
-                        <div className="font-black tabular-nums text-lg">{p?.score ?? 0}</div>
-                        <div className="h-4 text-xs font-semibold tabular-nums text-green-300">
-                          {showDelta && delta > 0 ? `+${delta}` : '\u00A0'}
+                      <div
+                        className={`relative flex items-center justify-end ${
+                          playersLayout.tier === 'micro'
+                            ? 'min-w-[86px]'
+                            : playersLayout.tier === 'ultra'
+                            ? 'min-w-[96px]'
+                            : playersLayout.tier === 'compact'
+                            ? 'min-w-[108px]'
+                            : 'min-w-[120px]'
+                        }`}
+                      >
+                        {showDelta && delta > 0 ? (
+                          <div
+                            key={`${id ?? idx}:${delta}:${barKey}`}
+                            className={`quizzy-float-up text-green-300 font-black tabular-nums ${
+                              playersLayout.tier === 'micro' ? 'text-xs' : 'text-sm'
+                            }`}
+                          >
+                            +{delta}
+                          </div>
+                        ) : null}
+                        <div className="flex items-center gap-2">
+                          <div
+                            className={`font-black tabular-nums leading-none ${
+                              playersLayout.tier === 'micro'
+                                ? 'text-base'
+                                : playersLayout.tier === 'ultra'
+                                ? 'text-lg'
+                                : 'text-xl'
+                            }`}
+                          >
+                            {p?.score ?? 0}
+                          </div>
+                          <CheckCircle2
+                            size={playersLayout.tier === 'micro' ? 14 : playersLayout.tier === 'ultra' ? 16 : 18}
+                            className={`${isReadyState ? 'text-green-400' : 'text-base-300/70'} shrink-0`}
+                          />
                         </div>
                       </div>
                     </div>

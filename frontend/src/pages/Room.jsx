@@ -8,6 +8,7 @@ import { getTelegramWebApp, isTelegramWebApp } from '../utils/telegram'
 import { Copy, Play, Users, Share2, CheckCircle2, LogOut as Leave, Tv } from 'lucide-react'
 import Snackbar from '../components/feedback/Snackbar'
 import RoomNotFound from '../components/room/RoomNotFound'
+import RoomFull from '../components/room/RoomFull'
 
 const difficultyMeta = {
   easy: { label: 'ЛЕГКО', badge: 'badge-q2' },
@@ -31,6 +32,8 @@ const Room = () => {
   const [isReady, setIsReady] = useState(false)
   const [snackbar, setSnackbar] = useState({ message: '', type: 'success', visible: false })
   const [spectateInfoOpen, setSpectateInfoOpen] = useState(false)
+  const [roomFull, setRoomFull] = useState(false)
+  const [joinBlocked, setJoinBlocked] = useState(false)
   const snackTimer = useRef(null)
 
   useEffect(() => {
@@ -44,7 +47,10 @@ const Room = () => {
   useEffect(() => {
     if (!socket || !gameId || !user) return
 
-    const join = () => emit('JOIN_GAME', { gameId, playerId: user.id, player: user, clientSessionId: getClientSessionId() })
+    const join = () => {
+      if (joinBlocked) return
+      emit('JOIN_GAME', { gameId, playerId: user.id, player: user, clientSessionId: getClientSessionId() })
+    }
     if (socket.connected) join()
     on('connect', join)
 
@@ -83,6 +89,13 @@ const Room = () => {
 
     const handleError = (err) => {
       const msg = err?.message || err?.error || 'Ошибка'
+      if (String(msg).toLowerCase().includes('переполн')) {
+        clearActiveGame()
+        setJoinBlocked(true)
+        setRoomFull(true)
+        showSnackbar('Комната переполнена', 'error')
+        return
+      }
       if (String(msg).toLowerCase().includes('комната не найдена')) {
         clearActiveGame()
         showSnackbar('Комната не найдена', 'error')
@@ -102,7 +115,7 @@ const Room = () => {
       off('ERROR')
       off('connect', join)
     }
-  }, [socket, gameId, user, emit, on, off, navigate])
+  }, [socket, gameId, user, emit, on, off, navigate, joinBlocked])
 
   const loadGame = async () => {
     try {
@@ -214,6 +227,10 @@ const Room = () => {
         </div>
       </div>
     )
+  }
+
+  if (roomFull) {
+    return <RoomFull gameId={gameId} onGoHome={() => navigate('/')} />
   }
 
   if (loading) {

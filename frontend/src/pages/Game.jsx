@@ -353,6 +353,12 @@ const Game = () => {
 
     const handleError = (err) => {
       const msg = err?.message || err?.error || 'Ошибка'
+      if (String(msg).toLowerCase().includes('переполн')) {
+        clearActiveGame()
+        showSnackbar('Комната переполнена', 'error')
+        navigate('/', { replace: true })
+        return
+      }
       if (String(msg).toLowerCase().includes('комната не найдена')) {
         clearActiveGame()
         showSnackbar('Комната не найдена', 'error')
@@ -552,10 +558,12 @@ const Game = () => {
                       ? 'bg-gradient-to-r from-gray-500 to-slate-600 text-white'
                       : index === 2
                       ? 'bg-gradient-to-r from-amber-700 to-amber-800 text-white'
-                      : 'bg-base-300 border border-base-300/70'
+                      : 'bg-base-300 border border-[#3a4de6]/60'
                   }`}
                 >
-                  <div className="text-2xl font-bold w-8">#{index + 1}</div>
+                  <div className="w-10 h-10 rounded-full bg-black/20 border border-[#3a4de6]/60 flex items-center justify-center font-black text-lg tabular-nums">
+                    {index + 1}
+                  </div>
                   <div className="avatar">
                     <div className="w-12 h-12 rounded-full bg-primary text-primary-content flex items-center justify-center">
                       {player.player.avatarUrl ? (
@@ -659,7 +667,9 @@ const Game = () => {
                         isSelf ? 'border-[#e5d423]' : 'border-[#3a4de6]'
                       } ${!p.isOnline ? 'opacity-60 grayscale' : ''}`}
                     >
-                      <span className="w-8 sm:w-10 text-center text-base sm:text-lg font-bold">#{idx + 1}</span>
+                      <span className="w-10 h-10 rounded-full bg-black/20 border border-[#3a4de6]/60 flex items-center justify-center font-black text-lg tabular-nums">
+                        {idx + 1}
+                      </span>
                       <div className="avatar">
                         <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-primary text-primary-content flex items-center justify-center">
                           {p.player?.avatarUrl ? (
@@ -674,16 +684,20 @@ const Game = () => {
                           {p.player?.username || p.player?.firstName || 'Игрок'}
                         </div>
                       </div>
-                      <div className="text-right min-w-[84px] sm:min-w-[110px]">
-                        <div
-                          className={`text-xl sm:text-2xl font-extrabold tabular-nums transition-transform duration-200 ${
-                            isChanged && scoreOverlay.step !== 'before' ? 'text-green-300' : 'text-[#e5d423]'
-                          } ${isChanged && scoreOverlay.step === 'updated' ? 'scale-110' : ''}`}
-                        >
-                          {p.score || 0}
-                        </div>
-                        <div className="h-5 text-xs sm:text-sm font-semibold tabular-nums text-green-300">
-                          {isChanged && scoreOverlay.step !== 'before' && delta > 0 ? `+${delta}` : '\u00A0'}
+                      <div className="relative min-w-[120px] flex items-center justify-end">
+                        {scoreOverlay.step === 'updated' && delta > 0 ? (
+                          <div key={`${id}:${delta}:${scoreOverlay.step}`} className="quizzy-float-up text-green-300 text-sm font-black tabular-nums">
+                            +{delta}
+                          </div>
+                        ) : null}
+                        <div className="flex items-center justify-end gap-2">
+                          <div
+                            className={`text-xl sm:text-2xl font-extrabold tabular-nums leading-none ${
+                              isChanged && scoreOverlay.step !== 'before' ? 'text-green-300' : 'text-[#e5d423]'
+                            }`}
+                          >
+                            {p.score || 0}
+                          </div>
                         </div>
                       </div>
                     </div>

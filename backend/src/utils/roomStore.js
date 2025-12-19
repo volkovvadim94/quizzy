@@ -1,4 +1,4 @@
-import { QUESTIONS_PER_GAME } from './constants.js'
+import { BOTS_PER_ROOM, MAX_PLAYERS_PER_ROOM, QUESTIONS_PER_GAME } from './constants.js'
 
 const rooms = new Map()
 const botTotalScores = new Map() // botId -> totalScore (in-memory)
@@ -95,11 +95,12 @@ export const ensurePlayer = (room, playerId) => {
   return room.players.get(playerId)
 }
 
-export const addBotsToRoom = (room, { count = 10 } = {}) => {
+export const addBotsToRoom = (room, { count = BOTS_PER_ROOM } = {}) => {
   if (!room || room.hasBots) return room
+  const targetCount = Math.max(0, Math.min(Number(count) || 0, MAX_PLAYERS_PER_ROOM - (room.players?.size || 0)))
   const existing = new Set(room.players.keys())
   const botIds = []
-  for (let i = 0; i < count; i += 1) {
+  for (let i = 0; i < count && botIds.length < targetCount; i += 1) {
     const id = -(i + 1)
     if (existing.has(id)) continue
     existing.add(id)

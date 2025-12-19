@@ -405,6 +405,28 @@ dialog.modal::backdrop,
   }
 }
 
+@keyframes quizzyFloatUp {
+  0% {
+    transform: translate(-50%, 0);
+    opacity: 0;
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -18px);
+    opacity: 0;
+  }
+}
+
+.quizzy-float-up {
+  left: 50%;
+  top: -6px;
+  position: absolute;
+  pointer-events: none;
+  animation: quizzyFloatUp 900ms ease-out forwards;
+}
+
 /* ---------- Mobile/iOS stability fixes ---------- */
 * {
   -webkit-tap-highlight-color: transparent;

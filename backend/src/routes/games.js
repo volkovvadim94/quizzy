@@ -152,7 +152,7 @@ router.post('/create', authenticateToken, async (req, res) => {
     const existing = listRooms().find((r) => r.organizerId === req.user.id && r.status !== 'finished')
     if (existing) {
       logEvent('room.create.existing', { roomId: existing.id, organizerId: req.user.id, status: existing.status })
-      if (featureBots()) addBotsToRoom(existing, { count: 10 })
+      if (featureBots()) addBotsToRoom(existing)
       const users = await prisma.user.findMany({
         where: { id: { in: getRealPlayerIds(existing) } },
         select: {
@@ -176,7 +176,7 @@ router.post('/create', authenticateToken, async (req, res) => {
       difficulty: chosenDifficulty,
       organizerId: req.user.id,
     })
-    if (featureBots()) addBotsToRoom(room, { count: 10 })
+    if (featureBots()) addBotsToRoom(room)
 
     logEvent('room.create', {
       roomId: room.id,

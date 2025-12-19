@@ -14,6 +14,7 @@ import {
 import {
   DIFFICULTY_LABELS,
   DIFFICULTY_SCORE,
+  MAX_PLAYERS_PER_ROOM,
   QUESTIONS_PER_GAME,
   RANDOM_DISTRIBUTION,
   QUESTION_TIME_MS,
@@ -789,6 +790,17 @@ export const setupSocketHandlers = (io) => {
 
         const sid = normalizeClientSessionId(clientSessionId)
         if (!sid) return socket.emit('ERROR', { message: 'Missing clientSessionId' })
+
+        if (!room.players?.has?.(pid) && (room.players?.size || 0) >= MAX_PLAYERS_PER_ROOM) {
+          logEvent('room.join.denied', {
+            gameId: gid,
+            playerId: pid,
+            reason: 'room_full',
+            players: room.players?.size || 0,
+            maxPlayers: MAX_PLAYERS_PER_ROOM,
+          })
+          return socket.emit('ERROR', { message: 'Комната переполнена' })
+        }
 
         socket.join(gid)
         socket.data.gameId = gid

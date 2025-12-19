@@ -1,5 +1,7 @@
 import {
+  BOTS_PER_ROOM,
   DIFFICULTY_SCORE,
+  MAX_PLAYERS_PER_ROOM,
   QUESTION_TIME_MS,
   QUESTIONS_PER_GAME,
   RANDOM_DISTRIBUTION,
@@ -41,6 +43,7 @@ export const logStartupInfo = ({
     parseBool(process.env.FEATURE_QUESTION_RATING, false)
   const playersListInGame = parseBool(process.env.FEATURE_PLAYERS_LIST_IN_GAME, true)
   const bots = parseBool(process.env.FEATURE_BOTS, false)
+  const botsCount = BOTS_PER_ROOM
 
   // Logs/debug
   const logSockets = parseBool(process.env.LOG_SOCKETS, env !== 'production')
@@ -56,9 +59,10 @@ export const logStartupInfo = ({
     `- socket.io: pingInterval=${formatMs(socketPingIntervalMs)} pingTimeout=${formatMs(socketPingTimeoutMs)}`,
     `- features: difficultySelection=${onOff(difficultySelection)} playersListInGame=${onOff(
       playersListInGame
-    )} bots=${onOff(bots)}`,
+    )} bots=${onOff(bots)} (count=${botsCount})`,
     `- logging: LOG_ROOMS=${onOff(logRooms)} LOG_SOCKETS=${onOff(logSockets)} DEBUG_SESSIONS=${onOff(debugSessions)}`,
     `- game: QUESTIONS_PER_GAME=${QUESTIONS_PER_GAME}`,
+    `- rooms: MAX_PLAYERS_PER_ROOM=${MAX_PLAYERS_PER_ROOM} (bots included)`,
     `- timeouts: QUESTION_TIME_MS=${formatMs(QUESTION_TIME_MS)} REVEAL_TIME_MS=${formatMs(
       REVEAL_TIME_MS
     )} SCORING_TIME_MS=${formatMs(SCORING_TIME_MS)} RECONNECT_GRACE_MS=${formatMs(
@@ -71,4 +75,3 @@ export const logStartupInfo = ({
 
   console.log(lines.join('\n'))
 }
-
