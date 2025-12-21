@@ -3,7 +3,10 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { LogOut, Trophy } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { useSocket } from '../../hooks/useSocket'
-import { getTelegramStartParam, getTelegramWebApp, safeTgCall } from '../../utils/telegram'
+import { getInitDataRaw, getTelegramStartParam, getTelegramWebApp } from '../../utils/telegram'
+import { init, isTMA, viewport } from '../../utils/tma'
+import { applyStoredTokenOverrides } from '../../theme/tokens'
+import { authAPI } from '../../utils/api'
 import {
   STORAGE_KEYS,
   getActiveGame,
@@ -27,6 +30,7 @@ export default function Layout({ children }) {
 
   const tgWebApp = getTelegramWebApp()
   const isWebApp = Boolean(tgWebApp?.initData)
+  const handledQrLoginRef = useRef(false)
 
   const resolveStartRoomCode = () => {
     const startParam = getTelegramStartParam()
@@ -35,15 +39,35 @@ export default function Layout({ children }) {
   }
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', 'quizzyDark')
+    const theme = 'quizzyDark'
+    document.documentElement.setAttribute('data-theme', theme)
+    applyStoredTokenOverrides(theme)
   }, [])
 
-  // Safe Telegram init (never crash)
+  // Telegram: always request full-viewport + fullscreen when available.
   useEffect(() => {
-    if (!tgWebApp) return
-    safeTgCall('ready')
-    safeTgCall('expand')
-  }, [tgWebApp])
+    async function initTg() {
+      try {
+        if (await isTMA()) {
+          init()
+
+          if (viewport.mount.isAvailable()) {
+            await viewport.mount()
+            viewport.expand()
+          }
+
+          if (viewport.requestFullscreen.isAvailable()) {
+            await viewport.requestFullscreen()
+          }
+        }
+      } catch (e) {
+        // Never crash the app because of Telegram client quirks
+        console.warn('Telegram init failed:', e)
+      }
+    }
+
+    initTg()
+  }, [])
 
   // Telegram deep-link support (t.me/... ?startapp=ROOMCODE).
   useEffect(() => {
@@ -58,6 +82,7 @@ export default function Layout({ children }) {
       location.pathname.startsWith('/game/') ||
       location.pathname.startsWith('/spectate/') ||
       location.pathname.startsWith('/profile') ||
+      location.pathname.startsWith('/themelab') ||
       location.pathname.startsWith('/session-switched') ||
       /^\/[A-Za-z0-9]{6}$/.test(location.pathname)
     ) {
@@ -67,6 +92,29 @@ export default function Layout({ children }) {
     setLastRoomHint(roomCode)
     navigate(`/room/${roomCode}`, { replace: true })
   }, [location.pathname, navigate])
+
+  // Telegram QR login confirmation (startapp=login_<token>).
+  useEffect(() => {
+    if (!isWebApp) return
+    if (handledQrLoginRef.current) return
+    const startParam = String(getTelegramStartParam() || '').trim()
+    if (!startParam.startsWith('login_')) return
+    const qrToken = startParam.slice('login_'.length).trim()
+    if (!qrToken) return
+
+    handledQrLoginRef.current = true
+
+    const initDataRaw = getInitDataRaw()
+    if (!initDataRaw) return
+
+    ;(async () => {
+      try {
+        await authAPI.telegramQrConfirm({ qrToken, initDataRaw })
+      } catch (e) {
+        console.warn('Telegram QR confirm failed:', e?.userMessage || e?.message || e)
+      }
+    })()
+  }, [isWebApp])
 
   // Auto-restore active game only when authenticated
   useEffect(() => {
@@ -86,7 +134,8 @@ export default function Layout({ children }) {
             setLastRoomHint(startRoom)
             const isSpectate = location.pathname.startsWith('/spectate/')
             const isOnProfile = location.pathname.startsWith('/profile')
-            if (!isSpectate && !isOnProfile && !location.pathname.startsWith('/room/') && !location.pathname.startsWith('/game/')) {
+            const isOnThemeLab = location.pathname.startsWith('/themelab')
+            if (!isSpectate && !isOnProfile && !isOnThemeLab && !location.pathname.startsWith('/room/') && !location.pathname.startsWith('/game/')) {
               navigate(`/room/${startRoom}`, { replace: true })
               return
             }
@@ -103,6 +152,7 @@ export default function Layout({ children }) {
       const isDirectRoom = location.pathname === `/${activeGame}`
       const isSpectate = location.pathname.startsWith('/spectate/')
       const isOnProfile = location.pathname.startsWith('/profile')
+      const isOnThemeLab = location.pathname.startsWith('/themelab')
 
       // Проверяем статус комнаты: если её нет или finished — очищаем локальное состояние
       try {
@@ -119,7 +169,7 @@ export default function Layout({ children }) {
         return
       }
 
-      if (!isOnRoom && !isOnGame && !isDirectRoom && !isSpectate && !isOnProfile) {
+      if (!isOnRoom && !isOnGame && !isDirectRoom && !isSpectate && !isOnProfile && !isOnThemeLab) {
         const target = activePhase === 'active' ? `/game/${activeGame}` : `/room/${activeGame}`
         navigate(target, { replace: true })
       }
@@ -211,6 +261,7 @@ export default function Layout({ children }) {
         location.pathname.startsWith('/game/') ||
         location.pathname.startsWith('/spectate/') ||
         location.pathname.startsWith('/profile') ||
+        location.pathname.startsWith('/themelab') ||
         location.pathname.startsWith('/session-switched') ||
         /^\/[A-Za-z0-9]{6}$/.test(location.pathname)
       ) {
@@ -251,7 +302,17 @@ export default function Layout({ children }) {
 
   return (
     <div className="page-shell text-base-content transition-colors flex flex-col h-screen overflow-hidden">
-      <div className="navbar navbar-surface shadow-2xl sticky top-0 z-30 px-4">
+      {isWebApp ? (
+        <div
+          className="navbar sticky top-0 z-30 px-4 justify-center items-start shadow-none border-b pt-[calc(env(safe-area-inset-top,0px)+20px)] pb-2 min-h-[110px]"
+          style={{ backgroundColor: 'var(--quizzy-tg-header-bg)', borderBottomColor: 'var(--quizzy-header-border)' }}
+        >
+          <button onClick={() => navigate('/')} className="flex items-center justify-center">
+            <img src="/logo.png" alt="Quizzy" className="h-20 w-auto" />
+          </button>
+        </div>
+      ) : (
+        <div className="navbar navbar-surface shadow-2xl sticky top-0 z-30 px-4">
         <div className="navbar-start gap-3">
           <button className="text-[2.4rem] font-black tracking-tight text-white" onClick={() => navigate('/')}>
             QUIZZY
@@ -265,10 +326,10 @@ export default function Layout({ children }) {
             <div className="flex items-center gap-2">
               <div
                 className="flex items-center gap-1 px-3 py-1.5 rounded-full text-white text-sm font-semibold"
-                style={{ backgroundColor: '#2b2f3d' }}
+                style={{ backgroundColor: 'var(--quizzy-pill-bg)' }}
                 title="Глобальный рейтинг"
               >
-                <Trophy size={16} style={{ color: '#e5d423' }} />
+                <Trophy size={16} style={{ color: 'var(--quizzy-accent)' }} />
                 <span>{score}</span>
               </div>
 
@@ -286,7 +347,7 @@ export default function Layout({ children }) {
                 <button
                   onClick={logout}
                   className="w-11 h-11 rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: '#e53935', color: '#ffffff' }}
+                  style={{ backgroundColor: 'var(--quizzy-danger)', color: 'var(--quizzy-btn-fg)' }}
                   title="Выйти"
                 >
                   <LogOut size={18} />
@@ -295,9 +356,10 @@ export default function Layout({ children }) {
             </div>
           ) : null}
         </div>
-      </div>
+        </div>
+      )}
 
-      <main className="container mx-auto px-4 py-4 flex-1 min-h-0 w-full flex flex-col gap-4 overflow-hidden safe-bottom">
+      <main className="container mx-auto px-4а1b2d4f py-4 flex-1 min-h-0 w-full flex flex-col gap-4 overflow-hidden safe-bottom">
         {children}
       </main>
     </div>

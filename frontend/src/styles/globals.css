@@ -6,6 +6,68 @@
   font-family: 'Inter', system-ui, sans-serif;
   --tw-backdrop-opacity: 0.9 !important;
 
+  /* ---------- Quizzy theme tokens (overridable) ---------- */
+  --quizzy-text: #f8fbff;
+  --quizzy-muted: #e5e7eb;
+  --quizzy-border: #334155;
+
+  --quizzy-body-bg: #070a12;
+  --quizzy-app-bg: #0a0f1b;
+  --quizzy-surface: #0f1626;
+  --quizzy-surface-2: #0f172a;
+
+  --quizzy-header-bg: #11192a;
+  --quizzy-tg-header-bg: #1b2d4f;
+  --quizzy-header-border: #334155;
+
+  --quizzy-btn-bg: #7e7e7e;
+  --quizzy-btn-fg: #f8fbff;
+  --quizzy-ghost-fg: #e5e7eb;
+
+  --quizzy-primary: #3a4de6;
+  --quizzy-secondary: #a855f7;
+  --quizzy-danger: #e53935;
+  --quizzy-btn-primary-fg: var(--quizzy-btn-fg);
+  --quizzy-btn-secondary-fg: var(--quizzy-btn-fg);
+
+  --quizzy-gold: #e5d423;
+  --quizzy-accent: var(--quizzy-gold);
+  --quizzy-accent-fg: #000000;
+
+  --quizzy-pill-bg: #2b2f3d;
+  --quizzy-room-input-bg: #000000;
+  --quizzy-room-join-btn-bg: #142e58;
+  --quizzy-room-join-btn-fg: #ffffff;
+  --quizzy-focus-ring: #3a4de6;
+  --quizzy-topic-btn-bg: #142e58;
+  --quizzy-placeholder: rgb(229 231 235 / 0.6);
+
+  /* legacy: prefer --quizzy-accent / --quizzy-accent-fg */
+  --quizzy-section-label-bg: var(--quizzy-accent);
+  --quizzy-section-label-fg: var(--quizzy-accent-fg);
+
+  /* Topic card */
+  --quizzy-topic-card-bg: #142e58;
+  --quizzy-topic-card-title: #ffffff;
+  --quizzy-topic-card-radius: 16px;
+  --quizzy-topic-card-overlay-rgb: 0 0 0;
+  --quizzy-topic-card-overlay-alpha-top: 0.35;
+  --quizzy-topic-card-overlay-alpha-bottom: 0.7;
+
+  /* Player row */
+  --quizzy-player-row-bg: #0f1626;
+  --quizzy-player-row-border: #3a4de6;
+  --quizzy-player-row-border-self: #e5d423;
+  --quizzy-player-row-radius: 12px;
+  --quizzy-player-row-offline-opacity: 0.6;
+  --quizzy-player-index-bg: rgb(0 0 0 / 0.2);
+  --quizzy-player-index-border: rgb(58 77 230 / 0.6);
+  --quizzy-player-ready-on: #22c55e;
+  --quizzy-player-ready-off: #6b7280;
+
+  --quizzy-overlay-rgb: 0 0 0;
+  --quizzy-overlay-opacity: 0.9;
+
   /* Dedicated badge palette (independent from daisyUI semantic colors) */
   --quizzy-badge-1-bg: #3a4de6;
   --quizzy-badge-1-fg: #f8fbff;
@@ -19,6 +81,66 @@
   --quizzy-badge-5-fg: #ffffff;
   --quizzy-badge-6-bg: #64748b;
   --quizzy-badge-6-fg: #ffffff;
+}
+
+[data-theme="quizzyLight"] {
+  --quizzy-text: #0b1224;
+  --quizzy-muted: #334155;
+
+  --quizzy-body-bg: #f3f6ff;
+  --quizzy-app-bg: #eef2ff;
+  --quizzy-surface: #ffffff;
+  --quizzy-surface-2: #f8fafc;
+
+  --quizzy-header-bg: #ffffff;
+  --quizzy-tg-header-bg: #dbeafe;
+  --quizzy-header-border: #cbd5e1;
+
+  --quizzy-btn-bg: #e2e8f0;
+  --quizzy-btn-fg: #0b1224;
+  --quizzy-btn-primary-fg: #ffffff;
+  --quizzy-btn-secondary-fg: #ffffff;
+  --quizzy-ghost-fg: #0b1224;
+
+  --quizzy-primary: #2563eb;
+  --quizzy-secondary: #d946ef;
+  --quizzy-danger: #ef4444;
+  --quizzy-gold: #f59e0b;
+  --quizzy-accent: var(--quizzy-gold);
+  --quizzy-accent-fg: #0b1224;
+
+  --quizzy-pill-bg: #dbeafe;
+  --quizzy-room-input-bg: #ffffff;
+  --quizzy-room-join-btn-bg: #2563eb;
+  --quizzy-room-join-btn-fg: #ffffff;
+  --quizzy-focus-ring: #2563eb;
+  --quizzy-topic-btn-bg: #c7d2fe;
+  --quizzy-placeholder: rgb(51 65 85 / 0.6);
+
+  --quizzy-section-label-bg: var(--quizzy-accent);
+  --quizzy-section-label-fg: var(--quizzy-accent-fg);
+
+  /* Topic card */
+  --quizzy-topic-card-bg: #c7d2fe;
+  --quizzy-topic-card-title: #ffffff;
+  --quizzy-topic-card-radius: 16px;
+  --quizzy-topic-card-overlay-rgb: 2 6 23;
+  --quizzy-topic-card-overlay-alpha-top: 0.15;
+  --quizzy-topic-card-overlay-alpha-bottom: 0.45;
+
+  /* Player row */
+  --quizzy-player-row-bg: rgb(190 244 203 / 1);
+  --quizzy-player-row-border: #2563eb;
+  --quizzy-player-row-border-self: #f59e0b;
+  --quizzy-player-row-radius: 12px;
+  --quizzy-player-row-offline-opacity: 0.6;
+  --quizzy-player-index-bg: rgb(2 6 23 / 0.06);
+  --quizzy-player-index-border: rgb(37 99 235 / 0.35);
+  --quizzy-player-ready-on: #16a34a;
+  --quizzy-player-ready-off: #64748b;
+
+  --quizzy-overlay-rgb: 2 6 23;
+  --quizzy-overlay-opacity: 0.45;
 }
 
 .badge-q1,
@@ -61,7 +183,7 @@
 body,
 .text-base-content,
 .text-neutral-content {
-  color: #f8fbff !important;
+  color: var(--quizzy-text) !important;
 }
 
 html, body {
@@ -69,27 +191,27 @@ html, body {
 }
 
 body {
-  background: #070a12;
-  color: #ffffff;
+  background: var(--quizzy-body-bg);
+  color: var(--quizzy-text);
   overflow: hidden;
 }
 
 .page-shell {
   position: relative;
   min-height: 100vh;
-  background: #0a0f1b !important;
+  background: var(--quizzy-app-bg) !important;
 }
 
 .room-join-input {
-  background: #000000 !important;
-  color: #e5e7eb !important;
+  background: var(--quizzy-room-input-bg) !important;
+  color: var(--quizzy-muted) !important;
   border: none !important;
   outline: none !important;
   box-shadow: none !important;
 }
 
 .room-join-input:focus {
-  box-shadow: inset 0 0 0 2px #3a4de6 !important;
+  box-shadow: inset 0 0 0 2px var(--quizzy-focus-ring) !important;
 }
 
 .page-shell::before {
@@ -97,7 +219,7 @@ body {
 }
 
 .glass-card {
-  background: #0f1626;
+  background: var(--quizzy-surface);
   border: none;
   box-shadow: none;
 }
@@ -105,19 +227,19 @@ body {
 .bg-base-100,
 .bg-base-200,
 .bg-base-300 {
-  background-color: #0f1626 !important;
-  color: #f8fbff !important;
+  background-color: var(--quizzy-surface) !important;
+  color: var(--quizzy-text) !important;
 }
 
 .navbar-surface {
-  background: #11192a !important;
+  background: var(--quizzy-header-bg) !important;
   border-bottom: none !important;
-  color: #e5e7eb;
+  color: var(--quizzy-muted);
 }
 
 .difficulty-modal {
-  background: #0f1626 !important;
-  color: #e5e7eb !important;
+  background: var(--quizzy-surface) !important;
+  color: var(--quizzy-muted) !important;
   border: none !important;
 }
 
@@ -125,7 +247,7 @@ body {
   transition: opacity 200ms ease, transform 200ms ease;
   margin: 0 !important;
   padding: 0 !important;
-  background: rgba(0, 0, 0, 0.9) !important;
+  background: rgb(var(--quizzy-overlay-rgb) / var(--quizzy-overlay-opacity)) !important;
 }
 
 .modal[open] .modal-box {
@@ -219,12 +341,23 @@ dialog.modal::backdrop,
 }
 
 .room-join-input::placeholder {
-  color: rgba(229, 231, 235, 0.6) !important;
+  color: var(--quizzy-placeholder) !important;
 }
 
 .room-join {
-  background: #0f172a !important;
+  background: var(--quizzy-surface-2) !important;
   border: none !important;
+}
+
+.room-join-btn {
+  background: var(--quizzy-room-join-btn-bg) !important;
+  color: var(--quizzy-room-join-btn-fg) !important;
+  border: none !important;
+}
+
+.section-label {
+  background: var(--quizzy-section-label-bg, var(--quizzy-accent)) !important;
+  color: var(--quizzy-section-label-fg, var(--quizzy-accent-fg)) !important;
 }
 
 .game-timer {
@@ -238,12 +371,15 @@ dialog.modal::backdrop,
 }
 
 .answer-option {
-  transition: all 0.2s ease;
+  transition: none !important;
 }
 
-.answer-option:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+.answer-option:hover,
+.answer-option:focus,
+.answer-option:active {
+  transform: none !important;
+  box-shadow: none !important;
+  outline: none !important;
 }
 
 .btn {
@@ -276,6 +412,29 @@ dialog.modal::backdrop,
   animation: ready-pulse 2s infinite;
 }
 
+@keyframes score-delta-float {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  10% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+}
+
+.score-delta {
+  animation: score-delta-float 1.2s ease-out both;
+  pointer-events: none;
+}
+
 .input-with-padding {
   padding-left: 1rem !important;
   padding-right: 1rem !important;
@@ -283,8 +442,8 @@ dialog.modal::backdrop,
 
 /* Difficulty modal solid backgrounds */
 .difficulty-modal {
-  background: #0f1626 !important;
-  color: #e5e7eb !important;
+  background: var(--quizzy-surface) !important;
+  color: var(--quizzy-muted) !important;
   border: none !important;
 }
 
@@ -302,54 +461,60 @@ dialog.modal::backdrop,
 }
 
 .btn {
-  background-color: #7e7e7e !important;
-  color: #f8fbff !important;
+  background-color: var(--quizzy-btn-bg) !important;
+  color: var(--quizzy-btn-fg) !important;
 }
 
 .card,
 .modal-box {
-  background: #0f1626 !important;
-  color: #f8fbff !important;
+  background: var(--quizzy-surface) !important;
+  color: var(--quizzy-text) !important;
 }
 
 .input,
 .textarea,
 .select {
-  background: #0f172a !important;
-  color: #f8fbff !important;
+  background: var(--quizzy-surface-2) !important;
+  color: var(--quizzy-text) !important;
 }
 
 .btn-primary {
-  background-color: #3a4de6 !important;
-  border-color: #3a4de6 !important;
-  color: #ffffff !important;
+  background-color: var(--quizzy-primary) !important;
+  border-color: var(--quizzy-primary) !important;
+  color: var(--quizzy-btn-primary-fg) !important;
 }
 
 .btn-primary:hover,
 .btn-primary:focus,
 .btn-primary:active {
-  background-color: #3a4de6 !important;
-  border-color: #3a4de6 !important;
+  background-color: var(--quizzy-primary) !important;
+  border-color: var(--quizzy-primary) !important;
 }
 
 .btn-secondary {
-  background-color: #a855f7 !important;
-  color: #ffffff !important;
+  background-color: var(--quizzy-secondary) !important;
+  color: var(--quizzy-btn-secondary-fg) !important;
 }
 
 .btn-ghost {
   background-color: transparent !important;
-  color: #e5e7eb !important;
+  color: var(--quizzy-ghost-fg) !important;
+  box-shadow: inset 0 0 0 1px var(--quizzy-border) !important;
+}
+
+.btn-danger {
+  background-color: var(--quizzy-danger) !important;
+  color: var(--quizzy-btn-fg) !important;
 }
 
 .btn-black {
-  background-color: #000000 !important;
-  color: #f8fbff !important;
+  background-color: var(--quizzy-room-input-bg) !important;
+  color: var(--quizzy-text) !important;
 }
 
 .topic-btn {
-  background-color: #142e58 !important;
-  color: #f8fbff !important;
+  background-color: var(--quizzy-topic-btn-bg) !important;
+  color: var(--quizzy-text) !important;
   transition: none !important;
   touch-action: pan-y;
 }
@@ -365,17 +530,17 @@ dialog.modal::backdrop,
 .topic-btn:focus,
 .topic-btn:active,
 .topic-btn:focus-visible {
-  background-color: #142e58 !important;
-  color: #f8fbff !important;
+  background-color: var(--quizzy-topic-btn-bg) !important;
+  color: var(--quizzy-text) !important;
   transform: none !important;
   box-shadow: none !important;
   outline: none !important;
 }
 
 .primary-flat {
-  background-color: #3a4de6 !important;
-  border-color: #3a4de6 !important;
-  color: #ffffff !important;
+  background-color: var(--quizzy-primary) !important;
+  border-color: var(--quizzy-primary) !important;
+  color: var(--quizzy-btn-fg) !important;
   box-shadow: none !important;
 }
 
@@ -398,10 +563,10 @@ dialog.modal::backdrop,
 
 @keyframes colorShift {
   from {
-    background: #3a4de6;
+    background: var(--quizzy-primary);
   }
   to {
-    background: #e53935;
+    background: var(--quizzy-danger);
   }
 }
 

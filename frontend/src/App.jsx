@@ -9,6 +9,7 @@ import Game from './pages/Game'
 import Spectate from './pages/Spectate'
 import Profile from './pages/Profile'
 import SessionSwitched from './pages/SessionSwitched'
+import ThemeLab from './pages/ThemeLab'
 import { useEffect } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 
@@ -41,6 +42,7 @@ export default function App() {
             <Route path="/welcome" element={<Welcome />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/session-switched" element={<SessionSwitched />} />
+            <Route path="/themelab" element={<ThemeLab />} />
             <Route path="/:gameId([A-Za-z0-9]{6})" element={<RoomEntry />} />
             <Route path="/room/:gameId" element={<Room />} />
             <Route path="/game/:gameId" element={<Game />} />

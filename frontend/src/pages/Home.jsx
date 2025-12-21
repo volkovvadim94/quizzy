@@ -6,6 +6,7 @@ import { gameAPI, questionAPI } from '../utils/api'
 import { Play } from 'lucide-react'
 import Snackbar from '../components/feedback/Snackbar'
 import DifficultyModal from '../components/modals/DifficultyModal'
+import TopicCard from '../components/topics/TopicCard'
 
 const difficulties = [
   { id: 'easy', name: 'Легко', color: 'badge-q2', description: 'Подходит для разогрева' },
@@ -19,8 +20,6 @@ const getTopicSlug = (topic) => {
   const raw = (topic?.name || topic?.id || 'default').toString().toLowerCase()
   return raw.replace(/[^a-z0-9а-яё]+/gi, '_')
 }
-
-const DEFAULT_TOPIC_IMG = '/topics/default.jpg'
 
 const Home = () => {
   const { user, isAuthenticated } = useAuth()
@@ -212,7 +211,7 @@ const Home = () => {
     <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
       {/* Подключиться */}
       <div className="card glass-card shadow-2xl border border-base-300/60 relative overflow-visible w-full max-w-[600px] mx-auto shrink-0 mt-3">
-        <div className="absolute -top-3 left-4 px-3 py-1 rounded-full bg-[#e5d423] text-black text-xs font-bold uppercase pointer-pass">
+        <div className="section-label absolute -top-3 left-4 px-3 py-1 rounded-full text-xs font-bold uppercase pointer-pass">
           Подключиться
         </div>
         <div className="card-body px-6 py-4 flex flex-col justify-center">
@@ -220,7 +219,7 @@ const Home = () => {
             <input
               type="text"
               placeholder="Введи код комнаты"
-              className="flex-1 h-12 px-4 room-join-input bg-transparent text-white placeholder:text-white/70 border-0 focus:outline-none focus:ring-0 rounded-l-xl"
+              className="flex-1 h-12 px-4 room-join-input bg-transparent border-0 focus:outline-none focus:ring-0 rounded-l-xl"
               value={gameCode}
               onChange={(e) => setGameCode(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && joinGame()}
@@ -229,8 +228,7 @@ const Home = () => {
             />
             <button
               onClick={joinGame}
-              className="h-12 w-[96px] px-2 font-semibold text-white flex items-center justify-center text-sm sm:text-base leading-none text-center"
-              style={{ backgroundColor: '#142e58' }}
+              className="room-join-btn h-12 w-[96px] px-2 font-semibold flex items-center justify-center text-sm sm:text-base leading-none text-center"
               type="button"
             >
               Войти
@@ -241,7 +239,7 @@ const Home = () => {
 
       {/* Создать игру */}
       <div className="card glass-card shadow-2xl border border-base-300/60 relative overflow-visible w-full max-w-[600px] mx-auto flex-1 min-h-0 flex flex-col">
-        <div className="absolute -top-3 left-4 px-3 py-1 rounded-full bg-[#e5d423] text-black text-xs font-bold uppercase pointer-pass">
+        <div className="section-label absolute -top-3 left-4 px-3 py-1 rounded-full text-xs font-bold uppercase pointer-pass">
           Создать игру
         </div>
 
@@ -260,45 +258,12 @@ const Home = () => {
                 const imgUrl = `/topics/${slug}.jpg`
 
                 return (
-                  <div
+                  <TopicCard
                     key={topic.id}
-                    role="button"
-                    tabIndex={0}
-                    className="topic-card relative rounded-2xl overflow-hidden select-none h-[200px] sm:h-[300px]"
-                    style={{ backgroundColor: '#142e58' }}
+                    title={topic.name || topic.id}
+                    imageUrl={imgUrl}
                     onClick={() => onTopicClick(topic)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') onTopicClick(topic)
-                    }}
-                    onContextMenu={(e) => e.preventDefault()} // Android long-press sometimes breaks scrolling/clicks
-                  >
-                    <div className="absolute inset-0 pointer-pass">
-                      <img
-                        src={imgUrl}
-                        alt={topic.name || topic.id}
-                        loading="lazy"
-                        decoding="async"
-                        width="640"
-                        height="360"
-                        draggable={false}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          if (e.currentTarget.src.endsWith(DEFAULT_TOPIC_IMG)) return
-                          e.currentTarget.src = DEFAULT_TOPIC_IMG
-                        }}
-                      />
-                      <div
-                        className="absolute inset-0 pointer-pass"
-                        style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.35), rgba(0,0,0,0.70))' }}
-                      />
-                    </div>
-
-                    <div className="absolute inset-0 flex items-end px-4 py-4 text-white pointer-pass">
-                      <div className="flex items-end justify-between w-full gap-3">
-                        <span className="font-bold text-2xl drop-shadow">{topic.name}</span>
-                      </div>
-                    </div>
-                  </div>
+                  />
                 )
               })}
 

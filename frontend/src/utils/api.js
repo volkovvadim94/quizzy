@@ -37,6 +37,9 @@ api.interceptors.response.use(
 
 export const authAPI = {
   telegramLogin: (payload) => api.post('/api/auth/telegram', payload),
+  telegramQrStart: () => api.post('/api/auth/telegram/qr/start'),
+  telegramQrStatus: (qrToken) => api.get('/api/auth/telegram/qr/status', { params: { qrToken } }),
+  telegramQrConfirm: (payload) => api.post('/api/auth/telegram/qr/confirm', payload),
   me: () => api.get('/api/auth/me'),
   // Alias for profile page
   getProfile: () => api.get('/api/auth/me'),

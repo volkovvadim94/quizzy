@@ -23,6 +23,14 @@ router.get('/', (_req, res) => {
   // Default OFF: bots should be opt-in.
   const bots = parseBool(process.env.FEATURE_BOTS, false);
 
+  // ---------- Auth switches ----------
+  const telegramEnabled = parseBool(process.env.AUTH_METHOD_TELEGRAM, true);
+  const emailEnabled = parseBool(process.env.AUTH_METHOD_EMAIL, false);
+  const vkEnabled = parseBool(process.env.AUTH_METHOD_VK, false);
+
+  const telegramModeRaw = String(process.env.AUTH_TELEGRAM_LOGIN_MODE || 'oauth').trim().toLowerCase();
+  const telegramMode = telegramModeRaw === 'qr' || telegramModeRaw === 'qrcode' ? 'qr' : 'oauth';
+
   res.set('Cache-Control', 'no-store');
   res.json({
     server: {
@@ -34,6 +42,13 @@ router.get('/', (_req, res) => {
       difficultySelection,
       playersListInGame,
       bots,
+    },
+    auth: {
+      methods: {
+        telegram: { enabled: telegramEnabled, mode: telegramMode },
+        email: { enabled: emailEnabled },
+        vk: { enabled: vkEnabled },
+      },
     },
   });
 });

@@ -9,6 +9,7 @@ import { Copy, Play, Users, Share2, CheckCircle2, LogOut as Leave, Tv } from 'lu
 import Snackbar from '../components/feedback/Snackbar'
 import RoomNotFound from '../components/room/RoomNotFound'
 import RoomFull from '../components/room/RoomFull'
+import PlayerRow from '../components/players/PlayerRow'
 
 const difficultyMeta = {
   easy: { label: 'ЛЕГКО', badge: 'badge-q2' },
@@ -397,49 +398,16 @@ const Room = () => {
             {players.map((gamePlayer, index) => {
               const isOnline = gamePlayer.isOnline !== false
               return (
-                <div
+                <PlayerRow
                   key={gamePlayer.player.id}
-                  className={`flex items-center gap-4 p-4 bg-base-200 rounded-xl mb-3 last:mb-0 border ${gamePlayer.player.id === user.id ? 'border-[#e5d423]' : 'border-[#3a4de6]'} ${!isOnline ? 'opacity-60 grayscale' : ''}`}
-                >
-                  <div className="text-lg font-bold text-white w-8 text-center">#{index + 1}</div>
-
-                  <div className="relative">
-                    <div className="avatar">
-                      <div className="w-10 h-10 rounded-full bg-primary text-primary-content flex items-center justify-center">
-                        {gamePlayer.player.avatarUrl ? (
-                          <img
-                            src={gamePlayer.player.avatarUrl}
-                            alt={gamePlayer.player.username}
-                            className="rounded-full"
-                          />
-                        ) : (
-                          <span className="text-sm font-bold">
-                            {gamePlayer.player.username?.charAt(0) || 'U'}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    {gamePlayer.player.id === game.organizerId && (
-                      <div className="absolute -top-2 left-1/2 -translate-x-1/2 text-xs leading-none text-[#e5d423]">
-                        ⭐
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex-1">
-                    <div className="font-semibold">
-                      {gamePlayer.player.username || `${gamePlayer.player.firstName || ''} ${gamePlayer.player.lastName || ''}`.trim()}
-                    </div>
-                    <div className="text-sm flex items-center gap-1 text-[#e5d423]">
-                      <span role="img" aria-label="trophy">🏆</span>
-                      <span>{gamePlayer.player.totalScore}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-center">
-                    <CheckCircle2 size={18} className={gamePlayer.isReady ? 'text-green-400' : 'text-gray-500'} />
-                  </div>
-                </div>
+                  index={index + 1}
+                  player={gamePlayer.player}
+                  isSelf={gamePlayer.player.id === user.id}
+                  isOrganizer={gamePlayer.player.id === game.organizerId}
+                  isReady={!!gamePlayer.isReady}
+                  isOnline={isOnline}
+                  className="mb-3 last:mb-0"
+                />
               )
             })}
 

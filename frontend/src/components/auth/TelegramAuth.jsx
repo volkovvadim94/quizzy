@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Send } from 'lucide-react'
+import { QRCodeCanvas } from 'qrcode.react'
 import { useAuth } from '../../hooks/useAuth'
-import { getInitDataRaw, isTelegramWebApp, safeTgCall } from '../../utils/telegram'
+import { useConfig } from '../../hooks/useConfig'
+import { authAPI } from '../../utils/api'
+import { buildTelegramMiniAppUrl, getInitDataRaw, isTelegramWebApp, safeTgCall } from '../../utils/telegram'
 
 const BOT_ID = import.meta.env.VITE_TELEGRAM_BOT_ID
-const TG_WIDGET_SRC = 'https://telegram.org/js/telegram-widget.js?22'
 
-// Redirect-style widget (rare): ?id=...&first_name=...&auth_date=...&hash=...
 function readTelegramRedirectParams() {
   const params = new URLSearchParams(window.location.search)
   const id = params.get('id')
@@ -25,37 +26,28 @@ function readTelegramRedirectParams() {
   }
 }
 
-function ensureWidgetScriptLoaded() {
-  return new Promise((resolve, reject) => {
-    if (typeof window === 'undefined') return resolve()
-    if (window.Telegram?.Login?.auth) return resolve()
-    const existing = document.querySelector(`script[src="${TG_WIDGET_SRC}"]`)
-    if (existing) {
-      existing.addEventListener('load', () => resolve())
-      existing.addEventListener('error', () => reject(new Error('Не удалось загрузить Telegram widget')))
-      return
-    }
-    const script = document.createElement('script')
-    script.src = TG_WIDGET_SRC
-    script.async = true
-    script.onload = () => resolve()
-    script.onerror = () => reject(new Error('Не удалось загрузить Telegram widget'))
-    document.body.appendChild(script)
-  })
-}
-
 export default function TelegramAuth() {
   const { login, user } = useAuth()
+  const { auth } = useConfig()
   const navigate = useNavigate()
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const [qrOpen, setQrOpen] = useState(false)
+  const [qrToken, setQrToken] = useState('')
+  const [qrUrl, setQrUrl] = useState('')
+  const [qrExpiresAtMs, setQrExpiresAtMs] = useState(0)
 
   const webAppLoginStarted = useRef(false)
 
   const isWebApp = isTelegramWebApp()
   const initDataRaw = useMemo(() => (isWebApp ? getInitDataRaw() : ''), [isWebApp])
 
-  // 1) Redirect-style login
+  const telegramCfg = auth?.methods?.telegram || { enabled: true, mode: 'oauth' }
+  const telegramEnabled = telegramCfg.enabled !== false
+  const telegramMode = String(telegramCfg.mode || 'oauth')
+
   useEffect(() => {
     if (user) return
     const redirectData = readTelegramRedirectParams()
@@ -75,7 +67,6 @@ export default function TelegramAuth() {
     })()
   }, [user, login, navigate])
 
-  // 2) Telegram WebApp autologin
   useEffect(() => {
     if (user) return
     if (!isWebApp) return
@@ -101,52 +92,101 @@ export default function TelegramAuth() {
     })()
   }, [user, isWebApp, initDataRaw, login, navigate])
 
+  const resetQr = () => {
+    setQrOpen(false)
+    setQrToken('')
+    setQrUrl('')
+    setQrExpiresAtMs(0)
+  }
+
+  const startQr = useCallback(async () => {
+    const r = await authAPI.telegramQrStart()
+    const token = r?.data?.qrToken || ''
+    const expiresAtMs = Number(r?.data?.expiresAtMs || 0)
+    if (!token) throw new Error('Failed to start QR login')
+
+    const url = buildTelegramMiniAppUrl(`login_${token}`)
+    if (!url) throw new Error('Missing VITE_TELEGRAM_BOT_USERNAME / VITE_TELEGRAM_WEBAPP_NAME for deep-link')
+
+    setQrToken(token)
+    setQrExpiresAtMs(expiresAtMs)
+    setQrUrl(url)
+  }, [])
+
   const loginWeb = useCallback(async () => {
     try {
       setLoading(true)
       setError('')
 
-      if (!BOT_ID) {
-        throw new Error('Не задан VITE_TELEGRAM_BOT_ID')
+      if (!telegramEnabled) throw new Error('Telegram login disabled')
+      if (!BOT_ID) throw new Error('Missing VITE_TELEGRAM_BOT_ID')
+
+      if (telegramMode === 'qr') {
+        setQrOpen(true)
+        await startQr()
+        return
       }
 
-      await ensureWidgetScriptLoaded()
-
-      const t = window.Telegram
-      if (!t?.Login?.auth) {
-        throw new Error('Telegram widget не доступен')
+      const originNoPort = `${window.location.protocol}//${window.location.hostname}`
+      const hasPort = Boolean(window.location.port)
+      if (hasPort) {
+        setError(`OAuth не работает на домене с портом. Либо открой ${originNoPort}/welcome, либо включи QR-логин в env.`)
+        return
       }
 
-      await new Promise((resolve, reject) => {
-        t.Login.auth({ bot_id: BOT_ID, request_access: 'write' }, async (data) => {
-          if (!data) {
-            reject(new Error('Авторизация отменена'))
-            return
-          }
-          try {
-            await login(data)
-            resolve()
-          } catch (e) {
-            reject(e)
-          }
-        })
-      })
+      const origin = originNoPort
+      const returnTo = `${originNoPort}/welcome`
+      const url =
+        `https://oauth.telegram.org/auth?bot_id=${encodeURIComponent(String(BOT_ID))}` +
+        `&origin=${encodeURIComponent(origin)}` +
+        `&request_access=write` +
+        `&return_to=${encodeURIComponent(returnTo)}`
 
-      navigate('/', { replace: true })
+      window.location.assign(url)
     } catch (e) {
       setError(e?.message || 'Ошибка авторизации')
     } finally {
       setLoading(false)
     }
-  }, [login, navigate])
+  }, [telegramEnabled, telegramMode, startQr])
 
-  // In WebApp we show a small status line; main CTA is in the page body
+  useEffect(() => {
+    if (!qrOpen || !qrToken) return
+
+    let stopped = false
+    const interval = setInterval(async () => {
+      if (stopped) return
+      try {
+        const r = await authAPI.telegramQrStatus(qrToken)
+        const status = r?.data?.status
+        if (status === 'approved') {
+          stopped = true
+          clearInterval(interval)
+          await login({ qrToken })
+          resetQr()
+          navigate('/', { replace: true })
+        }
+      } catch (e) {
+        const code = e?.response?.status
+        if (code === 404 || code === 410) {
+          stopped = true
+          clearInterval(interval)
+          setError('QR устарел. Нажми войти ещё раз.')
+          resetQr()
+        }
+      }
+    }, 1000)
+
+    return () => {
+      stopped = true
+      clearInterval(interval)
+    }
+  }, [qrOpen, qrToken, login, navigate])
+
   if (isWebApp) {
     return (
       <div className="flex items-center justify-center w-full">
-        <div className="text-white/80 text-sm">
-          {loading ? 'Входим через Telegram…' : error ? error : 'Подключаемся…'}
-        </div>
+        <div className="text-white/80 text-sm">{loading ? 'Авторизация…' : error ? error : 'Готово'}</div>
       </div>
     )
   }
@@ -158,11 +198,55 @@ export default function TelegramAuth() {
 
         {error && <div className="text-error text-sm">{error}</div>}
 
-        <button className={`btn btn-primary w-full gap-2 ${loading ? 'btn-disabled' : ''}`} onClick={loginWeb} disabled={loading}>
+        <button
+          className={`btn btn-primary w-full gap-2 ${loading || !telegramEnabled ? 'btn-disabled' : ''}`}
+          onClick={loginWeb}
+          disabled={loading || !telegramEnabled}
+        >
           <Send size={18} />
-          <span>{loading ? 'Входим…' : 'Войти через Telegram'}</span>
+          <span>{loading ? 'Загрузка…' : telegramMode === 'qr' ? 'Войти через Telegram (QR)' : 'Войти через Telegram'}</span>
         </button>
+
+        <div className="text-xs opacity-60 leading-relaxed">
+          OAuth может требовать настройки домена в BotFather (<span className="font-mono">/setdomain</span>).
+        </div>
       </div>
+
+      {qrOpen ? (
+        <dialog className="modal modal-open">
+          <div className="modal-box max-w-sm">
+            <div className="font-bold text-lg">Войти через Telegram</div>
+            <div className="text-sm opacity-70 mt-1">Отсканируй QR в Telegram, чтобы подтвердить вход.</div>
+
+            <div className="mt-4 flex items-center justify-center">
+              {qrUrl ? (
+                <div className="p-3 rounded-2xl" style={{ background: 'var(--quizzy-surface-2)' }}>
+                  <QRCodeCanvas value={qrUrl} size={220} includeMargin />
+                </div>
+              ) : (
+                <div className="text-sm opacity-70">Генерируем QR…</div>
+              )}
+            </div>
+
+            {qrUrl ? (
+              <div className="mt-3 flex flex-col gap-2">
+                <a className="btn btn-sm" href={qrUrl}>
+                  Открыть в Telegram
+                </a>
+                <div className="text-xs opacity-60 break-all">{qrUrl}</div>
+                {qrExpiresAtMs ? <div className="text-xs opacity-60">Истечёт: {new Date(qrExpiresAtMs).toLocaleTimeString()}</div> : null}
+              </div>
+            ) : null}
+
+            <div className="modal-action">
+              <button className="btn btn-ghost" onClick={resetQr}>
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </dialog>
+      ) : null}
     </div>
   )
 }
+

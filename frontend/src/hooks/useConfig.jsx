@@ -25,6 +25,13 @@ export function ConfigProvider({ children }) {
     ),
     playersListInGame: parseBool(import.meta?.env?.VITE_FEATURE_PLAYERS_LIST_IN_GAME, true),
   })
+  const [auth, setAuth] = useState({
+    methods: {
+      telegram: { enabled: true, mode: 'oauth' },
+      email: { enabled: false },
+      vk: { enabled: false },
+    },
+  })
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -34,11 +41,13 @@ export function ConfigProvider({ children }) {
       try {
         const res = await configAPI.get()
         const serverFeatures = res?.data?.features || {}
+        const serverAuth = res?.data?.auth || null
         if (!alive) return
         setFeatures((prev) => ({
           ...prev,
           ...serverFeatures,
         }))
+        if (serverAuth && typeof serverAuth === 'object') setAuth(serverAuth)
       } catch (e) {
         // Safe fallback: keep defaults if config endpoint is unavailable
         console.warn('Failed to load /api/config, using defaults.', e?.userMessage || e?.message || e)
@@ -52,7 +61,7 @@ export function ConfigProvider({ children }) {
     }
   }, [])
 
-  const value = useMemo(() => ({ features, loading }), [features, loading])
+  const value = useMemo(() => ({ features, auth, loading }), [features, auth, loading])
 
   return <ConfigContext.Provider value={value}>{children}</ConfigContext.Provider>
 }

@@ -8,6 +8,18 @@ const router = express.Router()
 const prisma = new PrismaClient()
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || ''
 
+// In-memory QR login sessions: qrToken -> { status, expiresAtMs, result? }
+// Single-instance only; for multi-instance use Redis.
+const qrSessions = new Map()
+const QR_TTL_MS = Number(process.env.AUTH_TELEGRAM_QR_TTL_MS || 2 * 60 * 1000) // default 2 minutes
+
+const purgeExpiredQrSessions = () => {
+  const now = Date.now()
+  for (const [k, v] of qrSessions.entries()) {
+    if (!v?.expiresAtMs || v.expiresAtMs <= now) qrSessions.delete(k)
+  }
+}
+
 // Проверка данных WebApp (initData)
 const verifyWebAppInitData = (initDataRaw = '') => {
   if (!BOT_TOKEN || !initDataRaw) return { ok: false, reason: 'no_token_or_data' }
@@ -57,9 +69,148 @@ const verifyTelegramData = (telegramData = {}) => {
   return computedHash === hash
 }
 
+async function upsertTelegramUser(telegramData = {}) {
+  const { id, username, first_name, last_name, photo_url } = telegramData
+
+  if (!id) {
+    const err = new Error('Telegram ID is required')
+    err.statusCode = 400
+    throw err
+  }
+
+  let user = await prisma.user.findUnique({
+    where: { telegramId: id.toString() },
+  })
+
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        telegramId: id.toString(),
+        username: username || `user_${id.toString().slice(0, 6)}`,
+        firstName: first_name || 'User',
+        lastName: last_name || '',
+        avatarUrl: photo_url || '',
+      },
+    })
+    console.log('🔐 Created new user:', user.id)
+  } else {
+    user = await prisma.user.update({
+      where: { telegramId: id.toString() },
+      data: {
+        username: username || user.username,
+        firstName: first_name || user.firstName,
+        lastName: last_name || user.lastName,
+        avatarUrl: photo_url || user.avatarUrl,
+      },
+    })
+    console.log('🔐 Updated existing user:', user.id)
+  }
+
+  const token = generateToken(user)
+
+  return {
+    success: true,
+    token,
+    player: {
+      id: user.id,
+      username: user.username,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      avatarUrl: user.avatarUrl,
+      totalScore: user.totalScore,
+    },
+  }
+}
+
+router.post('/telegram/qr/start', (_req, res) => {
+  purgeExpiredQrSessions()
+  const qrToken = crypto.randomBytes(24).toString('hex')
+  const ttl = Number.isFinite(QR_TTL_MS) ? QR_TTL_MS : 120000
+  const expiresAtMs = Date.now() + ttl
+  qrSessions.set(qrToken, { status: 'pending', expiresAtMs })
+  res.set('Cache-Control', 'no-store')
+  res.json({ success: true, qrToken, expiresAtMs })
+})
+
+router.get('/telegram/qr/status', (req, res) => {
+  purgeExpiredQrSessions()
+  const qrToken = String(req.query.qrToken || '').trim()
+  const s = qrToken ? qrSessions.get(qrToken) : null
+  if (!s) return res.status(404).json({ success: false, status: 'not_found' })
+  if (s.expiresAtMs <= Date.now()) {
+    qrSessions.delete(qrToken)
+    return res.status(410).json({ success: false, status: 'expired' })
+  }
+  res.set('Cache-Control', 'no-store')
+  res.json({ success: true, status: s.status, expiresAtMs: s.expiresAtMs })
+})
+
+router.post('/telegram/qr/confirm', async (req, res) => {
+  try {
+    purgeExpiredQrSessions()
+    const { qrToken, initDataRaw } = req.body || {}
+    const tokenKey = String(qrToken || '').trim()
+    if (!tokenKey) return res.status(400).json({ success: false, error: 'qrToken is required' })
+
+    const s = qrSessions.get(tokenKey)
+    if (!s) return res.status(404).json({ success: false, error: 'qrToken not found' })
+    if (s.expiresAtMs <= Date.now()) {
+      qrSessions.delete(tokenKey)
+      return res.status(410).json({ success: false, error: 'qrToken expired' })
+    }
+    if (s.status === 'approved') return res.json({ success: true, status: 'approved' })
+
+    const check = verifyWebAppInitData(String(initDataRaw || ''))
+    if (!check.ok) {
+      console.warn('⚠️ QR confirm initData verification failed:', check.reason)
+      return res.status(401).json({ success: false, error: 'Invalid Telegram WebApp data', reason: check.reason })
+    }
+
+    const params = new URLSearchParams(String(initDataRaw || ''))
+    const userStr = params.get('user')
+    const parsedUser = userStr ? JSON.parse(userStr) : {}
+
+    const telegramData = {
+      id: parsedUser.id,
+      username: parsedUser.username,
+      first_name: parsedUser.first_name,
+      last_name: parsedUser.last_name,
+      photo_url: parsedUser.photo_url,
+      auth_date: params.get('auth_date'),
+      hash: params.get('hash'),
+    }
+
+    const result = await upsertTelegramUser(telegramData)
+    qrSessions.set(tokenKey, { ...s, status: 'approved', result })
+    res.set('Cache-Control', 'no-store')
+    res.json({ success: true, status: 'approved' })
+  } catch (error) {
+    console.error('QR confirm error:', error)
+    res.status(500).json({ success: false, error: 'Internal server error' })
+  }
+})
+
 router.post('/telegram', async (req, res) => {
   try {
     const telegramData = req.body || {}
+
+    // QR exchange path: browser exchanges qrToken for JWT/player after approval.
+    if (telegramData.qrToken) {
+      purgeExpiredQrSessions()
+      const qrToken = String(telegramData.qrToken || '').trim()
+      const s = qrToken ? qrSessions.get(qrToken) : null
+      if (!s) return res.status(404).json({ success: false, error: 'qrToken not found' })
+      if (s.expiresAtMs <= Date.now()) {
+        qrSessions.delete(qrToken)
+        return res.status(410).json({ success: false, error: 'qrToken expired' })
+      }
+      if (s.status !== 'approved' || !s.result) {
+        return res.status(409).json({ success: false, error: 'qrToken not approved yet' })
+      }
+      qrSessions.delete(qrToken)
+      return res.json(s.result)
+    }
+
     const hasInitDataRaw = Boolean(telegramData.initDataRaw)
 
     // WebApp sends only initDataRaw; extract a safe preview for logs (without trusting it yet).
@@ -111,6 +262,9 @@ router.post('/telegram', async (req, res) => {
         return res.status(401).json({ success: false, error: 'Invalid Telegram data' })
       }
     }
+
+    const result = await upsertTelegramUser(telegramData)
+    return res.json(result)
 
     const { id, username, first_name, last_name, photo_url } = telegramData
 
@@ -164,7 +318,8 @@ router.post('/telegram', async (req, res) => {
     })
   } catch (error) {
     console.error('❌ Auth error:', error)
-    res.status(500).json({
+    const statusCode = error?.statusCode || 500
+    res.status(statusCode).json({
       success: false,
       error: 'Internal server error',
       details: error.message,
