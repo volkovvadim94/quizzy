@@ -60,7 +60,7 @@ export default function Home() {
   if (!user) return <Navigate to="/welcome" replace />
 
   return (
-    <div className="w-full max-w-[430px] mx-auto pb-20">
+    <div className="page-shell content-container pb-20 max-w-[1200px] w-full">
       <div className="pt-2">
         <div className="flex items-center gap-3">
           <img src={avatarUrl} alt="" className="w-12 h-12 rounded-full object-cover bg-[var(--qz-black-5)]" />
@@ -91,7 +91,7 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col gap-3">
+      <div className="mt-4 flex flex-col gap-4 w-full mx-auto">
         <ActionCard
           title="Подключиться к игре"
           subtitle="Ввести код комнаты"

@@ -78,6 +78,10 @@ export default function PlayerTile({
   showTier = true,
   showIndexOverride = null,
   gameScore,
+  scoreDisplayOverride = null,
+  scoreTone = 'neutral', // neutral | success | danger
+  animateScore = false,
+  avatarBorderColor = null,
   deltaText = '',
   deltaTone = 'positive', // positive | neutral | negative
 } = {}) {
@@ -87,7 +91,7 @@ export default function PlayerTile({
   const tierLabel = player?.tierLabel || getTierLabel(totalScore)
   const showMeta = typeof showMetaOverride === 'boolean' ? showMetaOverride : mode !== 'game'
 
-  const avatarBorder = !isOnline ? palette.border : isSelf ? palette.yellow : palette.primary
+  const avatarBorder = avatarBorderColor ?? (!isOnline ? palette.border : isSelf ? palette.yellow : palette.primary)
 
   const [deltaKey, setDeltaKey] = useState(0)
   const prevDeltaRef = useRef(deltaText)
@@ -103,13 +107,42 @@ export default function PlayerTile({
 
   const textTone = isOnline ? palette.text : palette.muted
   const subTone = isOnline ? palette.primary : palette.muted
-  const scoreTone = isOnline ? palette.yellow : palette.muted
+  const scoreToneBase = isOnline ? palette.yellow : palette.muted
 
   const showIndex = typeof showIndexOverride === 'boolean' ? showIndexOverride : mode === 'game'
   const indexLabel = typeof index === 'number' && Number.isFinite(index) ? String(index) : ''
 
+  const [displayedScore, setDisplayedScore] = useState(gameScore ?? 0)
+  const prevScoreRef = useRef(gameScore ?? 0)
+
+  useEffect(() => {
+    if (scoreDisplayOverride !== null && scoreDisplayOverride !== undefined) return
+    const target = Number(gameScore ?? 0)
+    const prev = prevScoreRef.current
+    if (!animateScore) {
+      prevScoreRef.current = target
+      setDisplayedScore(target)
+      return
+    }
+    if (Number.isNaN(target)) return
+    if (target === prev) return
+    prevScoreRef.current = target
+    const steps = 10
+    const duration = 200
+    const stepTime = Math.max(10, Math.floor(duration / steps))
+    const delta = target - prev
+    let currentStep = 0
+    const timer = setInterval(() => {
+      currentStep += 1
+      const next = Math.round(prev + (delta * currentStep) / steps)
+      setDisplayedScore(currentStep >= steps ? target : next)
+      if (currentStep >= steps) clearInterval(timer)
+    }, stepTime)
+    return () => clearInterval(timer)
+  }, [gameScore, animateScore, scoreDisplayOverride])
+
   return (
-    <div className="w-full flex items-center gap-3 py-3">
+    <div className="w-full flex items-center gap-3 py-3 min-h-[68px]">
       {showIndex ? (
         <div className="w-8 text-[28px] leading-none font-semibold tabular-nums text-[var(--qz-text)] text-center">{indexLabel}</div>
       ) : null}
@@ -168,16 +201,18 @@ export default function PlayerTile({
 
       {mode === 'game' ? (
         <div className="relative shrink-0 text-right pr-1">
-          {deltaText ? (
-            <div
-              key={deltaKey}
-              className="absolute top-3 right-0 text-[18px] leading-none font-semibold score-delta"
-              style={{ color: deltaColor }}
-            >
-              {deltaText}
-            </div>
-          ) : null}
-          <div className="text-[34px] leading-none font-semibold tabular-nums text-[var(--qz-text)]">{typeof gameScore === 'number' ? gameScore : 0}</div>
+          <div
+            className="text-[34px] leading-none font-semibold tabular-nums"
+            style={{ color: scoreDisplayOverride !== null && scoreDisplayOverride !== undefined ? palette.success : scoreTone === 'success' ? palette.success : scoreTone === 'danger' ? palette.error : scoreToneBase }}
+          >
+            {scoreDisplayOverride !== null && scoreDisplayOverride !== undefined
+              ? scoreDisplayOverride
+              : typeof displayedScore === 'number'
+              ? displayedScore
+              : typeof gameScore === 'number'
+              ? gameScore
+              : 0}
+          </div>
         </div>
       ) : null}
 

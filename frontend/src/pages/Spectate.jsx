@@ -5,6 +5,7 @@ import { gameAPI } from '../utils/api'
 import { CheckCircle2, Trophy, Volume2, VolumeX, RotateCcw } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { buildTelegramMiniAppUrl } from '../utils/telegram'
+import PlayerTile from '../components/players/PlayerTile'
 
 const parseOptions = (question) => {
   if (!question) return []
@@ -103,6 +104,7 @@ const Spectate = () => {
   const [finishedOnlineById, setFinishedOnlineById] = useState({})
   const [playersGridEl, setPlayersGridEl] = useState(null)
   const [playersGridBox, setPlayersGridBox] = useState({ width: 0, height: 0, isLg: false })
+  const [flashCorrect, setFlashCorrect] = useState(false)
 
   const resetSequenceReveal = () => setSequenceReveal({ showNumbers: false, reordered: false, highlightCount: 0 })
 
@@ -737,20 +739,8 @@ const Spectate = () => {
     return { cols: chosen.cols, gap: chosen.gap, rowHeight: rh, tier }
   }, [isFinished, playersCount, playersGridBox.height, playersGridBox.isLg])
 
-  const questionWidthClass = isFinished
-    ? 'lg:basis-full lg:max-w-full'
-    : playersLayout.cols === 3
-    ? 'lg:basis-[52%] lg:max-w-[52%]'
-    : playersLayout.cols === 2
-    ? 'lg:basis-[62%] lg:max-w-[62%]'
-    : 'lg:basis-[74%] lg:max-w-[74%]'
-
-  const playersWidthClass =
-    playersLayout.cols === 3
-      ? 'lg:basis-[48%] lg:max-w-[48%]'
-      : playersLayout.cols === 2
-      ? 'lg:basis-[38%] lg:max-w-[38%]'
-      : 'lg:basis-[26%] lg:max-w-[26%]'
+  const questionWidthClass = isFinished ? 'lg:basis-full lg:max-w-full' : 'lg:basis-[60%] lg:max-w-[60%]'
+  const playersWidthClass = isFinished ? 'lg:basis-full lg:max-w-full' : 'lg:basis-[40%] lg:max-w-[40%]'
 
   if (loading) {
     return (
@@ -817,112 +807,54 @@ const Spectate = () => {
     <div className="w-full h-full px-6 lg:px-10 pt-10 pb-10">
       <div className="w-full h-full">
         <div className="flex flex-col lg:flex-row gap-8 items-stretch h-full">
-          <div
-            className={`w-full ${questionWidthClass} lg:order-2 flex flex-col min-h-0`}
-          >
+          <div className={`w-full ${questionWidthClass} lg:order-2 flex flex-col min-h-0`}>
             <div
               className={`card shadow-2xl border border-base-300/60 relative overflow-visible flex-1 h-full min-h-0 ${
                 isFinished ? 'overflow-hidden' : ''
               }`}
               style={{ background: palette.black }}
             >
-              {!isFinished ? (
-                <div className="absolute -top-3 left-4 flex flex-wrap gap-2 pointer-pass">
-                  {gameStatus === 'active' ? (
-                    <>
-                      {primaryChipText ? (
-                        <div className="px-3 py-1 rounded-full text-xs font-bold uppercase pointer-pass" style={{ backgroundColor: palette.yellow, color: palette.black }}>
-                          {primaryChipText}
-                        </div>
-                      ) : null}
-                      {questionDifficultyChip ? (
-                        <div className={`badge gap-2 p-3 rounded-xl font-bold ${questionDifficultyChip.badge}`}>
-                          {questionDifficultyChip.label}
-                        </div>
-                      ) : null}
-                    </>
-                  ) : (
-                    <>
-                      <div className="px-3 py-1 rounded-full text-xs font-bold uppercase pointer-pass max-w-[70vw] lg:max-w-[820px] truncate" style={{ backgroundColor: palette.yellow, color: palette.black }}>
-                        {game?.topic || game?.topicName || 'Тема'}
-                      </div>
-                      {difficultyChip ? (
-                        <div className={`badge gap-2 p-3 rounded-xl font-bold ${difficultyChip.badge}`}>
-                          {difficultyChip.label}
-                        </div>
-                      ) : null}
-                    </>
-                  )}
-                </div>
-              ) : null}
-
-              <div className="card-body pt-10 flex flex-col h-full min-h-0">
+              <div className="card-body pt-6 flex flex-col h-full min-h-0">
                   {isFinished ? (
                     <>
                       <div className="text-center pt-2 pb-6 shrink-0">
-                        <Trophy className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-                        <h1 className="text-4xl lg:text-5xl font-black mb-2">Игра завершена!</h1>
-                        <div className="opacity-70 text-lg">Можно закрыть вкладку</div>
+                        <Trophy className="w-16 h-16 mx-auto mb-4" style={{ color: palette.yellow }} />
+                        <h1 className="text-[32px] lg:text-[40px] font-black mb-2 text-[var(--qz-text)]">Игра завершена!</h1>
+                        <div className="opacity-70 text-[16px]">Можно закрыть вкладку</div>
                       </div>
 
                       <div className="scroll-mask flex-1 min-h-0 overflow-y-auto pr-1">
-                        <div className="w-full max-w-[760px] mx-auto space-y-3 pb-1">
-                          {(finishedLeaderboard.length ? finishedLeaderboard : playersSorted).map((player, index) => {
-                            const id = getPublicPlayerId(player)
-                            const online = id ? finishedOnlineById?.[id] : player?.isOnline !== false
-                            return (
-                            <div
-                              key={player?.player?.id ?? player?.playerId ?? index}
-                              className={`w-full flex items-center gap-4 p-4 rounded-lg ${
-                                index === 0
-                                  ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white'
-                                  : index === 1
-                                  ? 'bg-gradient-to-r from-gray-500 to-slate-600 text-white'
-                                  : index === 2
-                                  ? 'bg-gradient-to-r from-amber-700 to-amber-800 text-white'
-                                  : 'bg-[var(--qz-black)] border'
-                              } ${online === false ? 'opacity-70 grayscale' : ''}`}
-                              style={index >= 3 ? { borderColor: palette.primary } : undefined}
-                            >
-                              <div className="w-10 h-10 rounded-full flex items-center justify-center font-black text-lg tabular-nums" style={{ backgroundColor: palette.black5, border: `1px solid ${palette.primary}` }}>
-                                {index + 1}
-                              </div>
-                              <div className="avatar">
-                                <div className="w-12 h-12 rounded-full bg-primary text-primary-content flex items-center justify-center overflow-hidden">
-                                  {player?.player?.avatarUrl ? (
-                                    <img src={player.player.avatarUrl} alt={player.player.username} className="rounded-full" />
-                                  ) : (
-                                    <span className="text-lg font-bold">{player?.player?.username?.charAt(0) || 'U'}</span>
-                                  )}
+                        <div className="w-full max-w-[900px] mx-auto bg-white border rounded-[10px]" style={{ borderColor: palette.black5 }}>
+                          <div className="divide-y" style={{ borderColor: palette.black5 }}>
+                            {(finishedLeaderboard.length ? finishedLeaderboard : playersSorted).map((player, index) => {
+                              const id = getPublicPlayerId(player)
+                              const online = id ? finishedOnlineById?.[id] : player?.isOnline !== false
+                              return (
+                                <div key={player?.player?.id ?? player?.playerId ?? index} className="px-4 py-3">
+                                  <PlayerTile
+                                    mode="game"
+                                    index={index + 1}
+                                    player={player?.player || player}
+                                    isOnline={online}
+                                    isSelf={false}
+                                    isOrganizer={game?.organizerId ? getPublicPlayerId(player) === game.organizerId : false}
+                                    showReady={false}
+                                    showMetaOverride={true}
+                                    showTier={false}
+                                    totalScore={player?.player?.totalScore ?? player?.totalScore}
+                                    gameScore={player?.score ?? 0}
+                                    avatarBorderColor={palette.black5}
+                                  />
                                 </div>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="font-semibold text-lg truncate">
-                                  {player?.player?.username ||
-                                    `${player?.player?.firstName || ''} ${player?.player?.lastName || ''}`.trim() ||
-                                    'User'}
-                                </div>
-                                <div className="text-sm opacity-90">🏆 {player?.player?.totalScore ?? 0}</div>
-                              </div>
-                              <div className="text-2xl font-black tabular-nums">{player?.score ?? 0}</div>
-                            </div>
-                            )
-                          })}
+                              )
+                            })}
+                          </div>
                         </div>
                       </div>
                     </>
                   ) : gameStatus === 'active' ? (
                     currentQuestion ? (
                     <>
-                      {phaseDuration > 0 ? (
-                        <div className="relative mb-3 h-2 rounded-full bg-base-300 overflow-hidden">
-                          <div
-                            key={barKey}
-                            className="absolute inset-0 rounded-full progress-bar-fill"
-                            style={{ animationDuration: `${phaseDuration}s` }}
-                          />
-                        </div>
-                      ) : null}
                       <div className="space-y-4">
                         {(() => {
                           const pictureUrl = normalizeMediaUrl(currentQuestion.picture, 'pictures')
@@ -1047,21 +979,19 @@ const Spectate = () => {
 
                           const correctPos = inSequencePresentation && hasOriginal ? correctPosByOriginalIndex.get(originalIndex) : undefined
                           const orderNumber = correctPos !== undefined ? correctPos + 1 : null
-                          const seqHighlight = inSequencePresentation && correctPos !== undefined && correctPos < (sequenceReveal?.highlightCount || 0)
+                          const seqHighlight = false
 
                           const isCorrect = !inSequencePresentation && correctAnswer !== null && hasOriginal && Number(correctAnswer) === originalIndex
                           const isDimmed = !inSequencePresentation && correctAnswer !== null && !isCorrect
 
-                          const letter = hasOriginal ? letterByOriginalIndex.get(originalIndex) || String.fromCharCode(65 + displayIndex) : String.fromCharCode(65 + displayIndex)
-
                           const baseBg = 'var(--quizzy-option-bg)'
                           const baseText = 'var(--quizzy-option-text)'
                           const correctBg = 'var(--quizzy-success)'
-                          const delay = inSequencePresentation && correctPos !== undefined ? Math.max(0, correctPos) * 200 : 0
+                          const delay = 0
 
                           let background = baseBg
                           let color = baseText
-                          let borderColor = 'transparent'
+                          let borderColor = palette.black5
 
                           if (inSequencePresentation) {
                             if (seqHighlight) {
@@ -1082,26 +1012,18 @@ const Spectate = () => {
                                 if (el) optionRowRefs.current.set(stableId, el)
                                 else optionRowRefs.current.delete(stableId)
                               }}
-                              className={`w-full px-7 py-5 rounded-2xl border will-change-transform ${isDimmed ? 'opacity-70' : ''}`}
+                              className={`answer-option relative w-full text-left px-4 py-3 rounded-2xl border will-change-transform ${isDimmed ? 'opacity-60' : ''}`}
                               style={{
                                 background,
                                 color,
-                                borderColor: borderColor !== 'transparent' ? borderColor : 'transparent',
+                                borderColor,
                                 '--answer-correct-bg': correctBg,
-                                animation:
-                                  correctAnswer !== null && isCorrect
-                                    ? `answer-flash 0.24s steps(2, end) 3 forwards`
-                                    : undefined,
-                                animationDelay: correctAnswer !== null && isCorrect ? `${delay}ms` : undefined,
                               }}
                             >
-                              <div className="flex items-center gap-4">
-                                <span className="w-10 h-10 rounded-full bg-black/20 border border-white/10 flex items-center justify-center font-black text-lg">
-                                  {letter}
-                                </span>
+                              <div className="flex items-center gap-3">
                                 <span className="text-xl font-semibold flex-1 min-w-0 break-words">{opt.text}</span>
-                                {inSequencePresentation && sequenceReveal?.showNumbers && orderNumber !== null ? (
-                                  <span className="w-10 h-10 rounded-full bg-black/20 border border-white/10 flex items-center justify-center font-black text-lg tabular-nums">
+                                {inSequencePresentation && orderNumber !== null ? (
+                                  <span className="w-10 h-10 rounded-full flex items-center justify-center font-black text-lg tabular-nums" style={{ background: 'var(--quizzy-secondary)', color: 'var(--quizzy-btn-secondary-fg)' }}>
                                     {orderNumber}
                                   </span>
                                 ) : null}
@@ -1150,154 +1072,58 @@ const Spectate = () => {
           </div>
 
           {!isFinished ? (
-          <div
-            className={`w-full ${playersWidthClass} lg:order-1 flex flex-col min-h-0`}
-          >
-            <div className="card glass-card shadow-xl border border-base-300/60 w-full relative overflow-visible flex-1 h-full min-h-0">
-              <div className="absolute -top-3 left-4 px-3 py-1 rounded-full text-xs font-bold uppercase pointer-pass" style={{ backgroundColor: palette.yellow, color: palette.black }}>
-                Игроки: {renderPlayers.length}
-              </div>
-              <div className="card-body pt-8 flex flex-col min-h-0">
-                <div
-                  ref={setPlayersGridEl}
-                  className="grid pr-1 flex-1 min-h-0 overflow-hidden"
-                  style={{
-                    gridTemplateColumns: `repeat(${playersLayout.cols}, minmax(0, 1fr))`,
-                    gridAutoRows: playersGridBox.height ? `${playersLayout.rowHeight}px` : undefined,
-                    gap: `${playersLayout.gap}px`,
-                  }}
-                >
-                  {renderPlayers.map((p, idx) => {
-                    const id = getPublicPlayerId(p)
-                    const delta = id ? scoreDeltas[id] : 0
-                    const hasAnswered = p?.currentAnswer !== null && p?.currentAnswer !== undefined
-                    const isReadyState = gameStatus === 'active' ? hasAnswered : !!p?.isReady
-                    return (
-                    <div
-                      key={p?.player?.id ?? p?.playerId ?? idx}
-                      ref={(el) => {
-                        const rid = String(getPublicPlayerId(p) ?? idx)
-                        if (el) playerRowRefs.current.set(rid, el)
-                        else playerRowRefs.current.delete(rid)
-                      }}
-                      className={`h-full flex items-center gap-3 overflow-hidden ${
-                        playersLayout.tier === 'micro'
-                          ? 'px-2 py-1.5'
-                          : playersLayout.tier === 'ultra'
-                          ? 'px-2 py-2'
-                          : playersLayout.tier === 'compact'
-                          ? 'px-3 py-3'
-                          : 'px-4 py-4'
-                      } rounded-xl bg-base-200 border will-change-transform ${
-                        p?.isOnline === false ? 'opacity-60 grayscale' : ''
-                      }`}
-                      style={{ borderColor: palette.primary }}
-                    >
-                      <span
-                        className="rounded-full flex items-center justify-center font-black tabular-nums"
-                        style={{
-                          backgroundColor: palette.black5,
-                          border: `1px solid ${palette.primary}`,
-                        }}
-                      >
-                        <span
-                          className={`${
-                          playersLayout.tier === 'micro'
-                            ? 'w-5 h-5 text-[10px]'
-                            : playersLayout.tier === 'ultra'
-                            ? 'w-6 h-6 text-xs'
-                            : playersLayout.tier === 'compact'
-                            ? 'w-7 h-7 text-sm'
-                            : 'w-8 h-8 text-base'
-                        } flex items-center justify-center`}
-                        >
-                          {idx + 1}
-                        </span>
-                      </span>
-                      <div className="avatar">
+            <div className={`w-full ${playersWidthClass} lg:order-1 flex flex-col min-h-0`}>
+              <div className="card glass-card shadow-xl border border-base-300/60 w-full relative overflow-hidden flex-1 h-full min-h-0">
+                <div className="card-body pt-6 flex flex-col min-h-0">
+                  <div className="flex-1 min-h-0 overflow-y-auto scroll-mask divide-y rounded-[10px] bg-white border" style={{ borderColor: palette.black5 }}>
+                    {renderPlayers.map((p, idx) => {
+                      const id = getPublicPlayerId(p)
+                      const delta = id ? scoreDeltas[id] : 0
+                      const hasAnswered = p?.currentAnswer !== null && p?.currentAnswer !== undefined
+                      const isReadyState = gameStatus === 'active' ? hasAnswered : !!p?.isReady
+                      const showDeltaPhase = scoringStep === 'before'
+                      const deltaText = showDeltaPhase ? (delta ? (delta > 0 ? `+${delta}` : `${delta}`) : '0') : ''
+                      const deltaTone = delta < 0 ? 'danger' : delta > 0 ? 'success' : 'neutral'
+                      const scoreDisplayOverride = showDeltaPhase ? deltaText : null
+                      const animateScore = !showDeltaPhase
+                      return (
                         <div
-                          className={`rounded-full bg-primary text-primary-content flex items-center justify-center overflow-hidden ${
-                            playersLayout.tier === 'micro'
-                              ? 'w-7 h-7'
-                              : playersLayout.tier === 'ultra'
-                              ? 'w-8 h-8'
-                              : playersLayout.tier === 'compact'
-                              ? 'w-9 h-9'
-                              : 'w-11 h-11'
-                          }`}
-                        >
-                          {p?.player?.avatarUrl ? (
-                            <img src={p.player.avatarUrl} alt={p?.player?.username || 'player'} className="rounded-full" />
-                          ) : (
-                            <span
-                              className={`${
-                                playersLayout.tier === 'micro' ? 'text-[10px]' : playersLayout.tier === 'ultra' ? 'text-xs' : 'text-sm'
-                              } font-bold`}
-                            >
-                              {p?.player?.username?.charAt(0) || 'U'}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div
-                          className={`font-semibold truncate ${
-                            playersLayout.tier === 'micro' ? 'text-xs' : playersLayout.tier === 'ultra' ? 'text-sm' : 'text-base'
-                          }`}
-                        >
-                          {p?.player?.username || `${p?.player?.firstName || ''} ${p?.player?.lastName || ''}`.trim() || 'User'}
-                        </div>
-                      </div>
-                      <div
-                        className={`relative flex items-center justify-end ${
-                          playersLayout.tier === 'micro'
-                            ? 'min-w-[86px]'
-                            : playersLayout.tier === 'ultra'
-                            ? 'min-w-[96px]'
-                            : playersLayout.tier === 'compact'
-                            ? 'min-w-[108px]'
-                            : 'min-w-[120px]'
-                        }`}
-                      >
-                        {showDelta && delta > 0 ? (
-                          <div
-                            key={`${id ?? idx}:${delta}:${barKey}`}
-                            className={`quizzy-float-up font-black tabular-nums ${
-                              playersLayout.tier === 'micro' ? 'text-xs' : 'text-sm'
-                            }`}
-                            style={{ color: palette.success }}
+                          key={p?.player?.id ?? p?.playerId ?? idx}
+                          ref={(el) => {
+                            const rid = String(getPublicPlayerId(p) ?? idx)
+                            if (el) playerRowRefs.current.set(rid, el)
+                            else playerRowRefs.current.delete(rid)
+                          }}
+                          className="px-4 py-2"
                           >
-                            +{delta}
-                          </div>
-                        ) : null}
-                        <div className="flex items-center gap-2">
-                          <div
-                            className={`font-black tabular-nums leading-none ${
-                              playersLayout.tier === 'micro'
-                                ? 'text-base'
-                                : playersLayout.tier === 'ultra'
-                                ? 'text-lg'
-                                : 'text-xl'
-                            }`}
-                          >
-                            {p?.score ?? 0}
-                          </div>
-                          <CheckCircle2
-                            size={playersLayout.tier === 'micro' ? 14 : playersLayout.tier === 'ultra' ? 16 : 18}
-                            className="shrink-0"
-                            style={{ color: isReadyState ? palette.success : 'var(--qz-gray)' }}
+                          <PlayerTile
+                            mode="game"
+                            index={idx + 1}
+                            player={p?.player || p}
+                            isOnline={p?.isOnline !== false}
+                            isOrganizer={game?.organizerId ? getPublicPlayerId(p) === game.organizerId : false}
+                            showReady={true}
+                            isReady={isReadyState}
+                            showMetaOverride={false}
+                            showTier={false}
+                            isSelf={false}
+                            scoreDisplayOverride={scoreDisplayOverride}
+                            scoreTone={deltaTone}
+                            animateScore={animateScore}
+                            gameScore={p?.score ?? 0}
+                            deltaText=""
+                            deltaTone={deltaTone}
+                            avatarBorderColor={palette.black5}
                           />
                         </div>
-                      </div>
-                    </div>
-                    )
-                  })}
+                      )
+                    })}
 
-                  {renderPlayers.length === 0 && <div className="text-center py-8 opacity-50">Нет игроков</div>}
+                    {renderPlayers.length === 0 && <div className="text-center py-8 opacity-50">Нет игроков</div>}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
           ) : null}
         </div>
       </div>

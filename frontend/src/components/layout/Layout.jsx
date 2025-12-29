@@ -399,7 +399,7 @@ export default function Layout({ children }) {
       <main
         className={`flex-1 min-h-0 w-full flex flex-col gap-4 ${
           showBottomNav
-            ? `${isHomeScreen ? 'overflow-hidden' : 'scroll-mask overflow-y-auto'} safe-bottom-nav max-w-[430px] mx-auto px-3`
+            ? `${isHomeScreen ? 'overflow-hidden' : 'scroll-mask overflow-y-auto'} safe-bottom-nav w-full max-w-[1200px] mx-auto px-4`
             : 'container mx-auto px-4 py-4 overflow-hidden safe-bottom'
         }`}
         style={

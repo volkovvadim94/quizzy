@@ -35,7 +35,7 @@ function PackCard({ title, subtitle, imageSrc, badge, disabled, onClick }) {
       onClick={onClick}
       disabled={disabled}
       className={[
-        'relative w-full h-[170px] rounded-[20px] overflow-hidden bg-[var(--qz-black)] text-left',
+        'relative w-full h-[240px] rounded-[20px] overflow-hidden bg-[var(--qz-black)] text-left',
         'shadow-[0_32px_64px_rgba(0,0,0,0.04),0_0_2px_rgba(0,0,0,0.02)]',
         disabled ? 'opacity-60' : '',
       ].join(' ')}
@@ -113,12 +113,12 @@ export default function NewGamePacks() {
   }
 
   return (
-    <div className="-mx-4 -my-4 flex flex-col flex-1 min-h-0 bg-white">
+    <div className="page-shell content-container flex flex-col flex-1 min-h-0 bg-white">
       <SectionHeader title={topic?.name || 'Тема'} subtitle="Подборка" backTo="/new-game/theme" />
 
       <div className="flex-1 min-h-0 overflow-hidden">
-        <div className="h-full overflow-y-auto scroll-mask px-3 pb-6" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }}>
-          <div className="flex flex-col gap-3 pt-3">
+        <div className="h-full overflow-y-auto scroll-mask pb-6" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)' }}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-3">
             {loading ? (
               <LoadingScreen
                 fullscreen={false}

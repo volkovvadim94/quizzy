@@ -594,17 +594,17 @@ const Game = () => {
   if (phase === PHASES.FINISHED) {
     return (
       <div
-        className="w-full max-w-[480px] mx-auto flex-1 min-h-0 flex flex-col px-4 pb-8"
+        className="page-shell content-container flex-1 min-h-0 flex flex-col items-center px-4 pb-12"
         style={{ paddingTop: topPadding }}
       >
-        <div className={`flex-1 min-h-0 flex flex-col ${leaderboard.length === 1 ? 'justify-center' : ''}`}>
+        <div className={`flex-1 min-h-0 flex flex-col w-full ${leaderboard.length === 1 ? 'justify-center' : ''}`}>
           <div className="text-center pb-4">
             <Trophy className="w-16 h-16 mx-auto mb-4" style={{ color: palette.yellow }} />
             <h1 className="text-[24px] leading-[30px] font-extrabold text-[var(--qz-text)]">Игра завершена</h1>
             <div className="text-sm text-[var(--qz-muted)] mt-1">Глобальный рейтинг обновлен</div>
           </div>
 
-          <div className="bg-white border rounded-[16px] shadow-sm overflow-hidden" style={{ borderColor: palette.black5 }}>
+          <div className="bg-white border rounded-[10px] shadow-sm overflow-hidden w-full max-w-[900px] mx-auto" style={{ borderColor: palette.black5 }}>
             <div
               className="scroll-mask overflow-y-auto"
               style={{ maxHeight: scoreListMaxHeight }}
@@ -618,14 +618,15 @@ const Game = () => {
                   <div className="px-4 py-3">
                     <PlayerTile
                       mode="game"
-                      showMetaOverride
-                      showTier={false}
-                      showReady={false}
-                      showIndexOverride
                       index={index + 1}
                       player={player.player}
                       isOnline={true}
                       isSelf={player.player.id === user?.id}
+                      isOrganizer={organizerId ? player.player.id === organizerId : false}
+                      showReady={false}
+                      showMetaOverride={false}
+                      showTier={false}
+                      totalScore={player.player?.totalScore}
                       gameScore={player.score}
                     />
                   </div>
@@ -635,9 +636,9 @@ const Game = () => {
           </div>
         </div>
 
-        <div className="pt-5">
+        <div className="pt-5 w-full flex justify-center">
           <button
-            className="w-full h-[50px] rounded-[12px] text-[17px] leading-[22px] font-semibold shadow-lg"
+            className="w-full max-w-[480px] h-[50px] rounded-[12px] text-[17px] leading-[22px] font-semibold shadow-lg"
             onClick={() => {
               emit('LEAVE_GAME', { gameId, playerId: user.id })
               clearActiveGame()
@@ -700,7 +701,7 @@ const Game = () => {
   const compactScoreOverlay = (scoreOverlay.displayPlayers?.length || 0) <= 7
 
   return (
-    <div className="-mx-4 -my-4 flex flex-col flex-1 min-h-0 bg-white">
+    <div className="page-shell content-container flex flex-col flex-1 min-h-0 bg-white">
       <LoadingScreen
         visible={showGlobalLoading}
         minDuration={600}
@@ -718,13 +719,13 @@ const Game = () => {
           >
             {compactScoreOverlay ? (
               <div
-                className="flex flex-col items-center gap-3 py-4"
+                className="content-container flex flex-col items-center gap-3 py-4"
                 style={{ marginTop: 'auto', marginBottom: 'auto' }}
               >
                 <div className="text-center text-[20px] leading-[26px] font-extrabold text-[var(--qz-text)]">Счет</div>
 
                 <div
-                  className="w-full bg-white border rounded-[10px] overflow-y-auto scroll-mask"
+                  className="w-full max-w-[900px] mx-auto bg-white border rounded-[10px] overflow-y-auto scroll-mask"
                   style={{ borderColor: palette.black5, maxHeight: scoreListMaxHeight }}
                 >
                   <div className="divide-y" style={{ borderColor: palette.black5 }}>
@@ -736,9 +737,11 @@ const Game = () => {
                       const beforeScore = scoreOverlay.beforeById[id]?.score ?? p.score ?? 0
                       const afterScore = scoreOverlay.afterById[id]?.score ?? p.score ?? 0
                       const delta = afterScore - beforeScore
-                      const deltaText =
-                        scoreOverlay.step === 'before' || !delta ? '' : delta > 0 ? `+${delta}` : `${delta}`
-                      const deltaTone = delta < 0 ? 'negative' : delta > 0 ? 'positive' : 'neutral'
+                      const showDeltaPhase = scoreOverlay.step === 'before'
+                      const deltaText = showDeltaPhase ? (delta ? (delta > 0 ? `+${delta}` : `${delta}`) : '0') : ''
+                      const deltaTone = delta < 0 ? 'danger' : delta > 0 ? 'success' : 'neutral'
+                      const scoreDisplayOverride = showDeltaPhase ? deltaText : null
+                      const animateScore = !showDeltaPhase
 
                       return (
                         <div
@@ -757,8 +760,14 @@ const Game = () => {
                             isSelf={id === user?.id}
                             isOrganizer={organizerId ? id === organizerId : false}
                             showReady={false}
+                            showMetaOverride={true}
+                            showTier={false}
+                            totalScore={basePlayer?.totalScore ?? p?.totalScore}
+                            scoreDisplayOverride={scoreDisplayOverride}
+                            scoreTone={deltaTone}
+                            animateScore={animateScore}
                             gameScore={typeof p.score === 'number' ? p.score : 0}
-                            deltaText={deltaText}
+                            deltaText=""
                             deltaTone={deltaTone}
                           />
                         </div>
@@ -768,10 +777,10 @@ const Game = () => {
                 </div>
               </div>
             ) : (
-              <>
-                <div className="py-3 text-center text-[20px] leading-[26px] font-extrabold text-[var(--qz-text)]">Счет</div>
+              <div className="content-container flex flex-col gap-3 py-4 mx-auto w-full max-w-[1000px]">
+                <div className="text-center text-[20px] leading-[26px] font-extrabold text-[var(--qz-text)]">Счет</div>
 
-                <div className="flex-1 min-h-0 bg-white border rounded-[10px] overflow-hidden" style={{ borderColor: palette.black5 }}>
+                <div className="flex-1 min-h-0 w-full max-w-[900px] mx-auto bg-white border rounded-[10px] overflow-hidden" style={{ borderColor: palette.black5 }}>
                   <div className="h-full overflow-y-auto scroll-mask">
                     <div className="divide-y" style={{ borderColor: palette.black5 }}>
                       {(scoreOverlay.displayPlayers || []).map((p, idx) => {
@@ -782,9 +791,11 @@ const Game = () => {
                         const beforeScore = scoreOverlay.beforeById[id]?.score ?? p.score ?? 0
                         const afterScore = scoreOverlay.afterById[id]?.score ?? p.score ?? 0
                         const delta = afterScore - beforeScore
-                        const deltaText =
-                          scoreOverlay.step === 'before' || !delta ? '' : delta > 0 ? `+${delta}` : `${delta}`
-                        const deltaTone = delta < 0 ? 'negative' : delta > 0 ? 'positive' : 'neutral'
+                        const showDeltaPhase = scoreOverlay.step === 'before'
+                        const deltaText = showDeltaPhase ? (delta ? (delta > 0 ? `+${delta}` : `${delta}`) : '0') : ''
+                        const deltaTone = delta < 0 ? 'danger' : delta > 0 ? 'success' : 'neutral'
+                        const scoreDisplayOverride = showDeltaPhase ? deltaText : null
+                        const animateScore = !showDeltaPhase
 
                         return (
                           <div
@@ -795,16 +806,22 @@ const Game = () => {
                             }}
                             className="px-4"
                           >
-                            <PlayerTile
-                              mode="game"
-                              index={idx + 1}
-                              player={basePlayer}
-                              isOnline={p.isOnline !== false}
+                          <PlayerTile
+                            mode="game"
+                            index={idx + 1}
+                            player={basePlayer}
+                            isOnline={p.isOnline !== false}
                               isSelf={id === user?.id}
                               isOrganizer={organizerId ? id === organizerId : false}
                               showReady={false}
+                              showMetaOverride={true}
+                              showTier={false}
+                              totalScore={basePlayer?.totalScore ?? p?.totalScore}
+                              scoreDisplayOverride={scoreDisplayOverride}
+                              scoreTone={deltaTone}
+                              animateScore={animateScore}
                               gameScore={typeof p.score === 'number' ? p.score : 0}
-                              deltaText={deltaText}
+                              deltaText=""
                               deltaTone={deltaTone}
                             />
                           </div>
@@ -813,7 +830,7 @@ const Game = () => {
                     </div>
                   </div>
                 </div>
-              </>
+              </div>
             )}
           </div>
         </div>
@@ -1264,7 +1281,7 @@ const Game = () => {
                 )
               })()}
               <h2 className="text-2xl font-bold leading-snug break-words whitespace-pre-line">{currentQuestion.text}</h2>
-              <div className="grid gap-3 mt-4">
+              <div className="grid gap-3 mt-4 md:grid-cols-2">
                 {optionOrder.map((opt, idx) => {
                   const originalIndex = opt.originalIndex
                   const isSelected =

@@ -329,7 +329,7 @@ export default function Room() {
   const startFg = canStart ? palette.white : palette.text
 
   return (
-    <div className="-mx-4 -my-4 flex flex-col flex-1 min-h-0 bg-white">
+    <div className="page-shell content-container flex flex-col flex-1 min-h-0 bg-white">
       <LoadingScreen
         visible={showGlobalLoading}
         minDuration={600}
@@ -354,9 +354,10 @@ export default function Room() {
         }
       />
 
-      <div className="flex-1 min-h-0 overflow-hidden px-3">
-        <div className="pt-3 flex flex-col gap-3 h-full min-h-0">
-            <div className="relative w-full h-[170px] rounded-[20px] overflow-hidden bg-[var(--qz-black)] shrink-0">
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <div className="pt-3 h-full min-h-0 flex flex-col gap-3 md:grid md:grid-cols-[1.05fr_1fr] md:gap-4 md:items-start">
+          <div className="flex flex-col gap-3">
+            <div className="relative w-full h-[170px] md:h-[220px] rounded-[20px] overflow-hidden bg-[var(--qz-black)] shrink-0">
               <img src={topicImageSrc} alt="" className="absolute inset-0 w-full h-full object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/55 to-black/10" />
               <div className="absolute left-4 right-4 bottom-4">
@@ -385,32 +386,36 @@ export default function Room() {
                 </button>
               ) : null}
             </div>
+          </div>
 
-            <div className="bg-white rounded-[12px] border overflow-hidden flex-1 min-h-0 flex flex-col" style={{ borderColor: 'var(--qz-black-5)' }}>
-              <div ref={playersScrollRef} className="scroll-mask">
-                <div>
-                  {players.map((gp, idx) => (
-                    <div key={gp.player.id}>
-                      <div className="px-4">
-                        <PlayerTile
-                          mode="room"
-                          player={gp.player}
-                          isOnline={gp.isOnline !== false}
-                          isSelf={gp.player.id === user.id}
-                          isOrganizer={game?.organizerId ? gp.player.id === game.organizerId : false}
-                          isReady={!!gp.isReady}
-                        />
-                      </div>
-                      {idx !== players.length - 1 ? <div className="h-px mx-4" style={{ backgroundColor: 'var(--qz-black-5)' }} /> : null}
+          <div
+            className="bg-white rounded-[12px] border overflow-hidden flex flex-col h-full min-h-0"
+            style={{ borderColor: 'var(--qz-black-5)' }}
+          >
+            <div ref={playersScrollRef} className="scroll-mask flex-1 min-h-0">
+              <div>
+                {players.map((gp, idx) => (
+                  <div key={gp.player.id}>
+                    <div className="px-4">
+                      <PlayerTile
+                        mode="room"
+                        player={gp.player}
+                        isOnline={gp.isOnline !== false}
+                        isSelf={gp.player.id === user.id}
+                        isOrganizer={game?.organizerId ? gp.player.id === game.organizerId : false}
+                        isReady={!!gp.isReady}
+                      />
                     </div>
-                  ))}
-                </div>
+                    {idx !== players.length - 1 ? <div className="h-px mx-4" style={{ backgroundColor: 'var(--qz-black-5)' }} /> : null}
+                  </div>
+                ))}
               </div>
             </div>
+          </div>
         </div>
       </div>
 
-      <div className="shrink-0 bg-white px-3" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 34px)' }}>
+      <div className="shrink-0 bg-white" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 34px)' }}>
         <div className="py-3 flex items-center justify-center text-[15px] leading-[22px] text-[var(--qz-gray)]">
           {bottomLabel}
         </div>

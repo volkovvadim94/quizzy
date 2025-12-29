@@ -53,7 +53,7 @@ export default function AppModal({
 
       <div
         className="relative bg-white rounded-[20px] shadow-2xl overflow-hidden"
-        style={{ width: 'min(366px, calc(100vw - 24px))' }}
+        style={{ width: 'min(720px, calc(100vw - 24px))' }}
       >
         <button
           type="button"
