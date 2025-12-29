@@ -1284,13 +1284,16 @@ const Game = () => {
               <div className="grid gap-3 mt-4 md:grid-cols-2">
                 {optionOrder.map((opt, idx) => {
                   const originalIndex = opt.originalIndex
-                  const isSelected =
-                    currentQuestion?.type === 'sequence'
-                      ? sequenceOrder[idx] !== null && sequenceOrder[idx] !== undefined
-                      : selectedOption === idx
+                  const isSeq = currentQuestion?.type === 'sequence'
+                  const isSelected = isSeq
+                    ? sequenceOrder[idx] !== null && sequenceOrder[idx] !== undefined
+                    : selectedOption === idx
+
                   let isCorrectOpt = correctAnswer === originalIndex
                   let isWrongSelection = phase === PHASES.REVEAL && isSelected && !isCorrectOpt
-                  if (phase === PHASES.REVEAL && currentQuestion?.type === 'sequence' && correctSequence) {
+                  let sequenceNumber = isSeq ? sequenceOrder[idx] ?? null : null
+
+                  if (phase === PHASES.REVEAL && isSeq && correctSequence) {
                     const cs = Array.isArray(correctSequence) ? correctSequence : []
                     const userSeq = Array.isArray(submittedSequence) ? submittedSequence : []
                     const userPos = userSeq.indexOf(originalIndex)
@@ -1302,80 +1305,24 @@ const Game = () => {
                       isCorrectOpt = false
                       isWrongSelection = userPos !== -1
                     }
-                  }
-                  const showPrimaryBg = hasSubmitted && isSelected && !isWrongSelection && phase !== PHASES.REVEAL
-                  const baseBg = 'var(--quizzy-option-bg)'
-                  const baseText = 'var(--quizzy-option-text)'
-                  const correctBg = 'var(--quizzy-success)'
-                  const wrongBg = 'var(--quizzy-danger)'
-                  const selectedBg = showPrimaryBg ? 'var(--quizzy-primary)' : baseBg
-                  const selectedText = showPrimaryBg ? 'var(--quizzy-btn-primary-fg)' : baseText
-
-                  let background = selectedBg
-                  let color = selectedText
-                  let borderColor = 'transparent'
-                if (phase === PHASES.REVEAL) {
-                  if (isCorrectOpt) {
-                    background = correctBg
-                    color = palette.white
-                  } else if (isWrongSelection) {
-                    background = wrongBg
-                    color = palette.white
-                  } else if (isSelected) {
-                    background = 'var(--quizzy-primary)'
-                    color = 'var(--quizzy-btn-primary-fg)'
-                  }
-                } else if (isSelected) {
-                    borderColor = 'var(--quizzy-primary)'
+                    sequenceNumber = correctPos !== -1 ? correctPos + 1 : sequenceNumber
                   }
 
                   return (
-                    <div
+                    <AnswerOption
                       key={idx}
-                      className="answer-option relative w-full text-left px-4 py-3 rounded-2xl border"
-                      style={{
-                        background,
-                        color,
-                        borderColor: borderColor !== 'transparent' ? borderColor : 'transparent',
-                        '--answer-correct-bg': correctBg,
-                      }}
-                      onClick={() => handleAnswerSelect(idx)}
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') handleAnswerSelect(idx)
-                      }}
-                    >
-                      <span className="font-semibold mr-2">{getOptionLetter(idx)}.</span>
-                      <span className="break-words">{opt.text}</span>
-                      {currentQuestion?.type === 'sequence' ? (
-                        <span
-                          className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center font-bold tabular-nums"
-                          style={{
-                            background:
-                              hasSubmitted && phase !== PHASES.REVEAL
-                                ? 'var(--quizzy-secondary)'
-                                : isSelected && phase !== PHASES.REVEAL
-                                  ? 'var(--quizzy-primary)'
-                                  : 'transparent',
-                            color:
-                              hasSubmitted && phase !== PHASES.REVEAL
-                                ? 'var(--quizzy-btn-secondary-fg)'
-                                : isSelected && phase !== PHASES.REVEAL
-                                  ? 'var(--quizzy-btn-primary-fg)'
-                                  : color,
-                            border: `2px solid ${hasSubmitted && phase !== PHASES.REVEAL
-                              ? 'var(--quizzy-secondary)'
-                              : isSelected && phase !== PHASES.REVEAL
-                                ? 'var(--quizzy-primary)'
-                                : 'rgba(255,255,255,0.25)'
-                              }`,
-                          }}
-                        >
-                          {isSelected ? sequenceOrder[idx] ?? '' : ''}
-                        </span>
-                      ) : null}
-                    </div>
+                      text={opt.text}
+                      letter={`${getOptionLetter(idx)}.`}
+                      showLetter
+                      isSelected={isSelected}
+                      isCorrect={isCorrectOpt}
+                      isWrong={isWrongSelection}
+                      isRevealPhase={phase === PHASES.REVEAL}
+                      hasSubmitted={hasSubmitted}
+                      isSequence={isSeq}
+                      sequenceNumber={sequenceNumber}
+                      onSelect={() => handleAnswerSelect(idx)}
+                    />
                   )
                 })}
               </div>

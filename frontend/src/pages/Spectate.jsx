@@ -6,6 +6,7 @@ import { CheckCircle2, Trophy, Volume2, VolumeX, RotateCcw } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { buildTelegramMiniAppUrl } from '../utils/telegram'
 import PlayerTile from '../components/players/PlayerTile'
+import AnswerOption from '../components/game/AnswerOption'
 
 const parseOptions = (question) => {
   if (!question) return []
@@ -1006,29 +1007,19 @@ const Spectate = () => {
                           }
 
                           return (
-                            <div
+                            <AnswerOption
                               key={stableId}
-                              ref={(el) => {
-                                if (el) optionRowRefs.current.set(stableId, el)
-                                else optionRowRefs.current.delete(stableId)
-                              }}
-                              className={`answer-option relative w-full text-left px-4 py-3 rounded-2xl border will-change-transform ${isDimmed ? 'opacity-60' : ''}`}
-                              style={{
-                                background,
-                                color,
-                                borderColor,
-                                '--answer-correct-bg': correctBg,
-                              }}
-                            >
-                              <div className="flex items-center gap-3">
-                                <span className="text-xl font-semibold flex-1 min-w-0 break-words">{opt.text}</span>
-                                {inSequencePresentation && orderNumber !== null ? (
-                                  <span className="w-10 h-10 rounded-full flex items-center justify-center font-black text-lg tabular-nums" style={{ background: 'var(--quizzy-secondary)', color: 'var(--quizzy-btn-secondary-fg)' }}>
-                                    {orderNumber}
-                                  </span>
-                                ) : null}
-                              </div>
-                            </div>
+                              text={opt.text}
+                              showLetter={false}
+                              isSelected={false}
+                              isCorrect={isCorrect}
+                              isWrong={false}
+                              isRevealPhase={correctAnswer !== null}
+                              hasSubmitted={false}
+                              isSequence={inSequencePresentation}
+                              sequenceNumber={orderNumber}
+                              onSelect={() => {}}
+                            />
                           )
                         })}
                       </div>

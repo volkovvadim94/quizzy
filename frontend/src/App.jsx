@@ -3,7 +3,6 @@ import { SocketProvider } from './hooks/useSocket'
 import Layout from './components/layout/Layout'
 import Landing from './pages/Landing'
 import Home from './pages/Home'
-import HomeLegacy from './pages/HomeLegacy'
 import Welcome from './pages/Welcome'
 import JoinRoom from './pages/JoinRoom'
 import Room from './pages/Room'
@@ -15,7 +14,6 @@ import Settings from './pages/Settings'
 import NewGameTheme from './pages/NewGameTheme'
 import NewGamePacks from './pages/NewGamePacks'
 import SessionSwitched from './pages/SessionSwitched'
-import ThemeLab from './pages/ThemeLab'
 import { useEffect } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 
@@ -45,7 +43,6 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/home" element={<Home />} />
-            <Route path="/home-legacy" element={<HomeLegacy />} />
             <Route path="/welcome" element={<Welcome />} />
             <Route path="/join" element={<JoinRoom />} />
             <Route path="/profile" element={<Profile />} />
@@ -54,7 +51,6 @@ export default function App() {
             <Route path="/new-game/theme" element={<NewGameTheme />} />
             <Route path="/new-game/packs" element={<NewGamePacks />} />
             <Route path="/session-switched" element={<SessionSwitched />} />
-            <Route path="/themelab" element={<ThemeLab />} />
             <Route path="/:gameId([A-Za-z0-9]{6})" element={<RoomEntry />} />
             <Route path="/room/:gameId" element={<Room />} />
             <Route path="/game/:gameId" element={<Game />} />

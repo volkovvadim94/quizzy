@@ -113,7 +113,6 @@ export default function Layout({ children }) {
       location.pathname.startsWith('/game/') ||
       location.pathname.startsWith('/spectate/') ||
       location.pathname.startsWith('/profile') ||
-      location.pathname.startsWith('/themelab') ||
       location.pathname.startsWith('/session-switched') ||
       /^\/[A-Za-z0-9]{6}$/.test(location.pathname)
     ) {
@@ -169,13 +168,11 @@ export default function Layout({ children }) {
           if (startRoom) {
             setLastRoomHint(startRoom)
             const isSpectate = location.pathname.startsWith('/spectate/')
-            const isOnThemeLab = location.pathname.startsWith('/themelab')
             if (
               !isSpectate &&
               !isProfile &&
               !isRating &&
               !isSettings &&
-              !isOnThemeLab &&
               !location.pathname.startsWith('/room/') &&
               !location.pathname.startsWith('/game/')
             ) {
@@ -195,7 +192,6 @@ export default function Layout({ children }) {
       const isDirectRoom = location.pathname === `/${activeGame}`
       const isSpectate = location.pathname.startsWith('/spectate/')
       const isOnProfile = isProfile
-      const isOnThemeLab = location.pathname.startsWith('/themelab')
       const isOnRating = isRating
       const isOnSettings = isSettings
 
@@ -214,7 +210,7 @@ export default function Layout({ children }) {
         return
       }
 
-      if (!isOnRoom && !isOnGame && !isDirectRoom && !isSpectate && !isOnProfile && !isOnRating && !isOnSettings && !isOnThemeLab) {
+      if (!isOnRoom && !isOnGame && !isDirectRoom && !isSpectate && !isOnProfile && !isOnRating && !isOnSettings) {
         const target = activePhase === 'active' ? `/game/${activeGame}` : `/room/${activeGame}`
         navigate(target, { replace: true })
       }
@@ -312,7 +308,6 @@ export default function Layout({ children }) {
         location.pathname.startsWith('/profile') ||
         location.pathname.startsWith('/rating') ||
         location.pathname.startsWith('/settings') ||
-        location.pathname.startsWith('/themelab') ||
         location.pathname.startsWith('/session-switched') ||
         /^\/[A-Za-z0-9]{6}$/.test(location.pathname)
       ) {
