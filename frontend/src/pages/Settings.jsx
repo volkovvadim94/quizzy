@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import StubPage from './StubPage'
 
-export default function Profile() {
+export default function Settings() {
   const navigate = useNavigate()
-  return <StubPage title="Профиль" onBack={() => navigate('/')} />
+  return <StubPage title="Настройки" onBack={() => navigate('/')} />
 }

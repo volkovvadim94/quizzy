@@ -1,6 +1,7 @@
 export const STORAGE_KEYS = {
   token: 'quizzy_token',
   user: 'quizzy_user',
+  theme: 'quizzy_theme',
   activeGame: 'quizzy_active_game',
   activePhase: 'quizzy_active_phase',
   clientSessionId: 'quizzy_client_session_id',

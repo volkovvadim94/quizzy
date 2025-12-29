@@ -27,7 +27,7 @@ export const generateRoomCode = () => {
   return code
 }
 
-export const createRoomState = ({ id, topicId, topicName, difficulty, organizerId }) => {
+export const createRoomState = ({ id, topicId, topicName, difficulty, organizerId, collectionIds = [] }) => {
   const room = {
     id,
     spectateToken: id,
@@ -35,6 +35,7 @@ export const createRoomState = ({ id, topicId, topicName, difficulty, organizerI
     topicName,
     organizerId,
     difficulty,
+    collectionIds: Array.isArray(collectionIds) ? collectionIds.map((v) => Number(v)).filter((n) => Number.isFinite(n)) : [],
     status: 'waiting',
     createdAt: new Date(),
     lastActivityAt: new Date(),
@@ -138,6 +139,14 @@ export const resetAnswers = (room) => {
   })
 }
 
+const isEntryOnline = (p) => {
+  if (p?.isBot) return true
+  if (p?.sockets?.size > 0) return true
+  // During the reconnect grace window we still consider the player online to avoid flicker
+  if (p?.disconnectTimer) return true
+  return false
+}
+
 export const roomToPublic = (room, usersById) => {
   const players = Array.from(room.players.values()).map((p) => ({
     playerId: p.playerId,
@@ -147,7 +156,7 @@ export const roomToPublic = (room, usersById) => {
     isReady: p.isReady,
     player: usersById[p.playerId] || p.botProfile || { id: p.playerId },
     isBot: !!p.isBot,
-    isOnline: p.isBot ? true : p.sockets?.size > 0,
+    isOnline: isEntryOnline(p),
   }))
   return {
     id: room.id,
@@ -155,6 +164,7 @@ export const roomToPublic = (room, usersById) => {
     topicId: room.topicId,
     topicName: room.topicName,
     difficulty: room.difficulty,
+    collectionIds: Array.isArray(room.collectionIds) ? room.collectionIds : [],
     organizerId: room.organizerId,
     status: room.status,
     currentQuestion: room.currentQuestion,

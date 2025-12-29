@@ -30,3 +30,22 @@ export const generateToken = (user) => {
     { expiresIn: '7d' }
   );
 };
+
+export const optionalAuthenticateToken = (req, _res, next) => {
+  const authHeader = req.headers['authorization']
+  const token = authHeader && authHeader.split(' ')[1]
+
+  if (!token) {
+    req.user = null
+    return next()
+  }
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) {
+      req.user = null
+      return next()
+    }
+    req.user = user
+    next()
+  })
+}

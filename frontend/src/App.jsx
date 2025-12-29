@@ -3,11 +3,17 @@ import { SocketProvider } from './hooks/useSocket'
 import Layout from './components/layout/Layout'
 import Landing from './pages/Landing'
 import Home from './pages/Home'
+import HomeLegacy from './pages/HomeLegacy'
 import Welcome from './pages/Welcome'
+import JoinRoom from './pages/JoinRoom'
 import Room from './pages/Room'
 import Game from './pages/Game'
 import Spectate from './pages/Spectate'
 import Profile from './pages/Profile'
+import Rating from './pages/Rating'
+import Settings from './pages/Settings'
+import NewGameTheme from './pages/NewGameTheme'
+import NewGamePacks from './pages/NewGamePacks'
 import SessionSwitched from './pages/SessionSwitched'
 import ThemeLab from './pages/ThemeLab'
 import { useEffect } from 'react'
@@ -39,8 +45,14 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/home" element={<Home />} />
+            <Route path="/home-legacy" element={<HomeLegacy />} />
             <Route path="/welcome" element={<Welcome />} />
+            <Route path="/join" element={<JoinRoom />} />
             <Route path="/profile" element={<Profile />} />
+            <Route path="/rating" element={<Rating />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/new-game/theme" element={<NewGameTheme />} />
+            <Route path="/new-game/packs" element={<NewGamePacks />} />
             <Route path="/session-switched" element={<SessionSwitched />} />
             <Route path="/themelab" element={<ThemeLab />} />
             <Route path="/:gameId([A-Za-z0-9]{6})" element={<RoomEntry />} />

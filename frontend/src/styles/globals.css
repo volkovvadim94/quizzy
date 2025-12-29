@@ -6,141 +6,154 @@
   font-family: 'Inter', system-ui, sans-serif;
   --tw-backdrop-opacity: 0.9 !important;
 
+  /* ---------- Base palette (13 colors + alpha) ---------- */
+  --qz-blue: #007aff;
+  --qz-blue-10: rgba(0, 122, 255, 0.1);
+  --qz-blue-60: rgba(0, 122, 255, 0.6);
+  --qz-text: #35383f;
+  --qz-white: #ffffff;
+  --qz-black: #000000;
+  --qz-black-5: rgba(0, 0, 0, 0.05);
+  --qz-black-50: rgba(0, 0, 0, 0.5);
+  --qz-gray: #9e9e9e;
+  --qz-yellow: #ffa000;
+  --qz-success: #22c55e;
+  --qz-error: #d7302d;
+  --qz-gradient: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.55) 100%);
+
   /* ---------- Quizzy theme tokens (overridable) ---------- */
-  --quizzy-text: #f8fbff;
-  --quizzy-muted: #e5e7eb;
-  --quizzy-border: #334155;
+  --quizzy-text: var(--qz-text);
+  --quizzy-muted: var(--qz-gray);
+  --quizzy-border: var(--qz-black-5);
 
-  --quizzy-body-bg: #070a12;
-  --quizzy-app-bg: #0a0f1b;
-  --quizzy-surface: #0f1626;
-  --quizzy-surface-2: #0f172a;
+  --quizzy-body-bg: var(--qz-white);
+  --quizzy-app-bg: var(--qz-white);
+  --quizzy-surface: var(--qz-white);
+  --quizzy-surface-2: var(--qz-black-5);
 
-  --quizzy-header-bg: #11192a;
-  --quizzy-tg-header-bg: #1b2d4f;
-  --quizzy-header-border: #334155;
+  --quizzy-header-bg: var(--qz-white);
+  --quizzy-tg-header-bg: var(--qz-white);
+  --quizzy-header-border: var(--qz-black-5);
 
-  --quizzy-btn-bg: #7e7e7e;
-  --quizzy-btn-fg: #f8fbff;
-  --quizzy-ghost-fg: #e5e7eb;
+  --quizzy-btn-bg: var(--qz-blue);
+  --quizzy-btn-fg: var(--qz-white);
+  --quizzy-ghost-fg: var(--qz-text);
 
-  --quizzy-primary: #3a4de6;
-  --quizzy-secondary: #a855f7;
-  --quizzy-danger: #e53935;
-  --quizzy-btn-primary-fg: var(--quizzy-btn-fg);
-  --quizzy-btn-secondary-fg: var(--quizzy-btn-fg);
+  --quizzy-primary: var(--qz-blue);
+  --quizzy-secondary: var(--qz-blue-10);
+  --quizzy-danger: var(--qz-error);
+  --quizzy-success: var(--qz-success);
+  --quizzy-btn-primary-fg: var(--qz-white);
+  --quizzy-btn-secondary-fg: var(--qz-text);
+  --quizzy-exit-btn-bg: var(--qz-black);
+  --quizzy-exit-btn-fg: var(--qz-white);
 
-  --quizzy-gold: #e5d423;
+  --quizzy-gold: var(--qz-yellow);
   --quizzy-accent: var(--quizzy-gold);
-  --quizzy-accent-fg: #000000;
+  --quizzy-accent-fg: var(--qz-black);
 
-  --quizzy-pill-bg: #2b2f3d;
-  --quizzy-room-input-bg: #000000;
-  --quizzy-room-join-btn-bg: #142e58;
-  --quizzy-room-join-btn-fg: #ffffff;
-  --quizzy-focus-ring: #3a4de6;
-  --quizzy-topic-btn-bg: #142e58;
-  --quizzy-placeholder: rgb(229 231 235 / 0.6);
+  --quizzy-pill-bg: var(--qz-black-5);
+  --quizzy-room-input-bg: var(--qz-white);
+  --quizzy-room-join-btn-bg: var(--qz-blue);
+  --quizzy-room-join-btn-fg: var(--qz-white);
+  --quizzy-focus-ring: var(--qz-blue);
+  --quizzy-topic-btn-bg: var(--qz-blue-10);
+  --quizzy-placeholder: rgba(0, 0, 0, 0.5);
+  --quizzy-option-bg: var(--qz-blue-10);
+  --quizzy-option-text: var(--qz-text);
 
   /* legacy: prefer --quizzy-accent / --quizzy-accent-fg */
   --quizzy-section-label-bg: var(--quizzy-accent);
   --quizzy-section-label-fg: var(--quizzy-accent-fg);
 
   /* Topic card */
-  --quizzy-topic-card-bg: #142e58;
-  --quizzy-topic-card-title: #ffffff;
-  --quizzy-topic-card-radius: 16px;
+  --quizzy-topic-card-bg: var(--qz-blue-10);
+  --quizzy-topic-card-title: var(--qz-white);
+  --quizzy-topic-card-radius: 12px;
   --quizzy-topic-card-overlay-rgb: 0 0 0;
-  --quizzy-topic-card-overlay-alpha-top: 0.35;
-  --quizzy-topic-card-overlay-alpha-bottom: 0.7;
+  --quizzy-topic-card-overlay-alpha-top: 0;
+  --quizzy-topic-card-overlay-alpha-bottom: 0.55;
 
   /* Player row */
-  --quizzy-player-row-bg: #0f1626;
-  --quizzy-player-row-border: #3a4de6;
-  --quizzy-player-row-border-self: #e5d423;
+  --quizzy-player-row-bg: var(--qz-blue-10);
+  --quizzy-player-row-border: var(--qz-blue);
+  --quizzy-player-row-border-self: var(--qz-yellow);
   --quizzy-player-row-radius: 12px;
   --quizzy-player-row-offline-opacity: 0.6;
-  --quizzy-player-index-bg: rgb(0 0 0 / 0.2);
-  --quizzy-player-index-border: rgb(58 77 230 / 0.6);
-  --quizzy-player-ready-on: #22c55e;
-  --quizzy-player-ready-off: #6b7280;
+  --quizzy-player-index-bg: rgba(0, 0, 0, 0.05);
+  --quizzy-player-index-border: rgba(0, 122, 255, 0.35);
+  --quizzy-player-ready-on: var(--qz-success);
+  --quizzy-player-ready-off: var(--qz-gray);
 
   --quizzy-overlay-rgb: 0 0 0;
-  --quizzy-overlay-opacity: 0.9;
+  --quizzy-overlay-opacity: 0.5;
 
-  /* Dedicated badge palette (independent from daisyUI semantic colors) */
-  --quizzy-badge-1-bg: #3a4de6;
-  --quizzy-badge-1-fg: #f8fbff;
-  --quizzy-badge-2-bg: #22c55e;
-  --quizzy-badge-2-fg: #0b1224;
-  --quizzy-badge-3-bg: #22d3ee;
-  --quizzy-badge-3-fg: #041016;
-  --quizzy-badge-4-bg: #ef4444;
-  --quizzy-badge-4-fg: #ffffff;
-  --quizzy-badge-5-bg: #a855f7;
-  --quizzy-badge-5-fg: #ffffff;
-  --quizzy-badge-6-bg: #64748b;
-  --quizzy-badge-6-fg: #ffffff;
+  /* Dedicated badge palette */
+  --quizzy-badge-1-bg: var(--qz-blue);
+  --quizzy-badge-1-fg: var(--qz-white);
+  --quizzy-badge-2-bg: var(--qz-success);
+  --quizzy-badge-2-fg: var(--qz-black);
+  --quizzy-badge-3-bg: var(--qz-yellow);
+  --quizzy-badge-3-fg: var(--qz-black);
+  --quizzy-badge-4-bg: var(--qz-error);
+  --quizzy-badge-4-fg: var(--qz-white);
+  --quizzy-badge-5-bg: var(--qz-gray);
+  --quizzy-badge-5-fg: var(--qz-white);
+  --quizzy-badge-6-bg: var(--qz-text);
+  --quizzy-badge-6-fg: var(--qz-white);
 }
 
 [data-theme="quizzyLight"] {
-  --quizzy-text: #0b1224;
-  --quizzy-muted: #334155;
-
-  --quizzy-body-bg: #f3f6ff;
-  --quizzy-app-bg: #eef2ff;
-  --quizzy-surface: #ffffff;
-  --quizzy-surface-2: #f8fafc;
-
-  --quizzy-header-bg: #ffffff;
-  --quizzy-tg-header-bg: #dbeafe;
-  --quizzy-header-border: #cbd5e1;
-
-  --quizzy-btn-bg: #e2e8f0;
-  --quizzy-btn-fg: #0b1224;
-  --quizzy-btn-primary-fg: #ffffff;
-  --quizzy-btn-secondary-fg: #ffffff;
-  --quizzy-ghost-fg: #0b1224;
-
-  --quizzy-primary: #2563eb;
-  --quizzy-secondary: #d946ef;
-  --quizzy-danger: #ef4444;
-  --quizzy-gold: #f59e0b;
+  --quizzy-text: var(--qz-text);
+  --quizzy-muted: var(--qz-gray);
+  --quizzy-body-bg: var(--qz-white);
+  --quizzy-app-bg: var(--qz-white);
+  --quizzy-surface: var(--qz-white);
+  --quizzy-surface-2: var(--qz-black-5);
+  --quizzy-header-bg: var(--qz-white);
+  --quizzy-tg-header-bg: var(--qz-white);
+  --quizzy-header-border: var(--qz-black-5);
+  --quizzy-btn-bg: var(--qz-blue);
+  --quizzy-btn-fg: var(--qz-white);
+  --quizzy-success: var(--qz-success);
+  --quizzy-exit-btn-bg: var(--qz-black);
+  --quizzy-exit-btn-fg: var(--qz-white);
+  --quizzy-btn-primary-fg: var(--qz-white);
+  --quizzy-btn-secondary-fg: var(--qz-text);
+  --quizzy-ghost-fg: var(--qz-text);
+  --quizzy-primary: var(--qz-blue);
+  --quizzy-secondary: var(--qz-blue-10);
+  --quizzy-danger: var(--qz-error);
+  --quizzy-gold: var(--qz-yellow);
   --quizzy-accent: var(--quizzy-gold);
-  --quizzy-accent-fg: #0b1224;
-
-  --quizzy-pill-bg: #dbeafe;
-  --quizzy-room-input-bg: #ffffff;
-  --quizzy-room-join-btn-bg: #2563eb;
-  --quizzy-room-join-btn-fg: #ffffff;
-  --quizzy-focus-ring: #2563eb;
-  --quizzy-topic-btn-bg: #c7d2fe;
-  --quizzy-placeholder: rgb(51 65 85 / 0.6);
-
+  --quizzy-accent-fg: var(--qz-black);
+  --quizzy-pill-bg: var(--qz-black-5);
+  --quizzy-room-input-bg: var(--qz-white);
+  --quizzy-room-join-btn-bg: var(--qz-blue);
+  --quizzy-room-join-btn-fg: var(--qz-white);
+  --quizzy-focus-ring: var(--qz-blue);
+  --quizzy-topic-btn-bg: var(--qz-blue-10);
+  --quizzy-placeholder: rgba(0, 0, 0, 0.5);
+  --quizzy-option-bg: var(--qz-blue-10);
+  --quizzy-option-text: var(--qz-text);
   --quizzy-section-label-bg: var(--quizzy-accent);
   --quizzy-section-label-fg: var(--quizzy-accent-fg);
-
-  /* Topic card */
-  --quizzy-topic-card-bg: #c7d2fe;
-  --quizzy-topic-card-title: #ffffff;
-  --quizzy-topic-card-radius: 16px;
-  --quizzy-topic-card-overlay-rgb: 2 6 23;
-  --quizzy-topic-card-overlay-alpha-top: 0.15;
-  --quizzy-topic-card-overlay-alpha-bottom: 0.45;
-
-  /* Player row */
-  --quizzy-player-row-bg: rgb(190 244 203 / 1);
-  --quizzy-player-row-border: #2563eb;
-  --quizzy-player-row-border-self: #f59e0b;
+  --quizzy-topic-card-bg: var(--qz-blue-10);
+  --quizzy-topic-card-title: var(--qz-white);
+  --quizzy-topic-card-overlay-rgb: 0 0 0;
+  --quizzy-topic-card-overlay-alpha-top: 0;
+  --quizzy-topic-card-overlay-alpha-bottom: 0.55;
+  --quizzy-player-row-bg: var(--qz-blue-10);
+  --quizzy-player-row-border: var(--qz-blue);
+  --quizzy-player-row-border-self: var(--qz-yellow);
   --quizzy-player-row-radius: 12px;
   --quizzy-player-row-offline-opacity: 0.6;
-  --quizzy-player-index-bg: rgb(2 6 23 / 0.06);
-  --quizzy-player-index-border: rgb(37 99 235 / 0.35);
-  --quizzy-player-ready-on: #16a34a;
-  --quizzy-player-ready-off: #64748b;
-
-  --quizzy-overlay-rgb: 2 6 23;
-  --quizzy-overlay-opacity: 0.45;
+  --quizzy-player-index-bg: rgba(0, 0, 0, 0.05);
+  --quizzy-player-index-border: rgba(0, 122, 255, 0.35);
+  --quizzy-player-ready-on: var(--qz-success);
+  --quizzy-player-ready-off: var(--qz-gray);
+  --quizzy-overlay-rgb: 0 0 0;
+  --quizzy-overlay-opacity: 0.5;
 }
 
 .badge-q1,
@@ -290,7 +303,7 @@ dialog.modal::backdrop,
 *::backdrop,
 #top-layer,
 .modal.modal-open {
-  background: rgba(0, 0, 0, 0.9) !important;
+  background: rgba(0, 0, 0, 0.5) !important;
   opacity: 1 !important;
   inset: 0 !important;
   backdrop-filter: none !important;
@@ -298,7 +311,7 @@ dialog.modal::backdrop,
 
 /* DaisyUI non-dialog modal backdrop */
 .modal:where(:not(dialog)) {
-  background: rgba(0, 0, 0, 0.9) !important;
+  background: rgba(0, 0, 0, 0.5) !important;
 }
 
 .scroll-mask {
@@ -327,7 +340,7 @@ dialog.modal::backdrop,
   content: '';
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(0, 0, 0, 0.5);
   z-index: 40;
   pointer-events: none;
 }
@@ -361,7 +374,7 @@ dialog.modal::backdrop,
 }
 
 .game-timer {
-  background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+  background: linear-gradient(45deg, var(--qz-blue-60), var(--qz-blue));
   animation: pulse 2s infinite;
 }
 
@@ -400,11 +413,11 @@ dialog.modal::backdrop,
 @keyframes ready-pulse {
   0%, 100% {
     transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+    box-shadow: 0 0 0 0 var(--qz-blue-60);
   }
   50% {
     transform: scale(1.02);
-    box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+    box-shadow: 0 0 0 10px rgba(0, 122, 255, 0);
   }
 }
 
@@ -433,6 +446,17 @@ dialog.modal::backdrop,
 .score-delta {
   animation: score-delta-float 1.2s ease-out both;
   pointer-events: none;
+}
+
+@keyframes answer-flash {
+  0%, 40% {
+    background-color: var(--answer-correct-bg, var(--quizzy-success));
+    filter: brightness(0.25);
+  }
+  50%, 100% {
+    background-color: var(--answer-correct-bg, var(--quizzy-success));
+    filter: brightness(1);
+  }
 }
 
 .input-with-padding {
@@ -508,8 +532,8 @@ dialog.modal::backdrop,
 }
 
 .btn-black {
-  background-color: var(--quizzy-room-input-bg) !important;
-  color: var(--quizzy-text) !important;
+  background-color: var(--quizzy-exit-btn-bg) !important;
+  color: var(--quizzy-exit-btn-fg) !important;
 }
 
 .topic-btn {
@@ -586,7 +610,7 @@ dialog.modal::backdrop,
 
 .quizzy-float-up {
   left: 50%;
-  top: -6px;
+  top: -20px;
   position: absolute;
   pointer-events: none;
   animation: quizzyFloatUp 900ms ease-out forwards;
@@ -615,6 +639,10 @@ button, a, [role="button"], .btn {
 
 .safe-bottom {
   padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+}
+
+.safe-bottom-nav {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
 }
 
 /* iOS/Safari hit-testing stability for blurred cards */

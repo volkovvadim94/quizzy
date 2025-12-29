@@ -385,16 +385,16 @@ export default function ThemeLab() {
     <div className="scroll-mask flex-1 min-h-0">
       <div className="flex flex-col gap-4 pb-6">
         <div className="glass-card rounded-2xl p-4 flex items-start justify-between gap-3">
-          <div className="flex flex-col gap-1">
-            <div className="text-xl font-bold">ThemeLab</div>
-            <div className="text-sm opacity-70">Настраиваем токены палитры и витрину компонентов (превью + контролы).</div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="btn btn-ghost" onClick={() => navigate('/')}>
-              На главную
-            </button>
-          </div>
+        <div className="flex flex-col gap-1">
+          <div className="text-xl font-bold">ThemeLab</div>
+          <div className="text-sm opacity-70">Настраиваем токены палитры и витрину компонентов (превью + контролы).</div>
         </div>
+        <div className="flex items-center gap-2">
+          <button className="btn btn-primary btn-sm" onClick={() => navigate('/')}>
+            На главную
+          </button>
+        </div>
+      </div>
 
       <Section title="Настройки" subtitle="Тема и быстрые действия (только внутри ThemeLab).">
         <div className="flex flex-col gap-3">
@@ -701,11 +701,11 @@ export default function ThemeLab() {
             <div className="section-label absolute -top-3 left-4 px-3 py-1 rounded-full text-xs font-bold uppercase pointer-pass">Игроки 2/3</div>
             <div className="card-body pt-8 pb-6 px-6 flex flex-col gap-3">
               <div className="flex gap-3">
-                <button className="flex-1 h-11 rounded-full text-white font-semibold inline-flex items-center justify-center gap-2" style={{ backgroundColor: '#000' }}>
+                <button className="btn btn-black flex-1 h-11 font-semibold inline-flex items-center justify-center gap-2">
                   Выйти
                 </button>
                 <button
-                  className="flex-1 h-11 rounded-full text-white font-semibold inline-flex items-center justify-center gap-2"
+                  className="btn flex-1 h-11 font-semibold inline-flex items-center justify-center gap-2"
                   style={{ backgroundColor: lobbyPreview.ready ? 'var(--quizzy-player-ready-on)' : 'var(--quizzy-player-ready-off)' }}
                   onClick={() => setLobbyPreview((s) => ({ ...s, ready: !s.ready }))}
                   type="button"
@@ -714,7 +714,7 @@ export default function ThemeLab() {
                 </button>
               </div>
               {lobbyPreview.isOrganizer ? (
-                <button className={`btn btn-primary rounded-full w-full ${!lobbyPreview.canStart ? 'opacity-50 cursor-not-allowed' : ''}`} disabled={!lobbyPreview.canStart}>
+                <button className={`btn btn-primary w-full ${!lobbyPreview.canStart ? 'opacity-50 cursor-not-allowed' : ''}`} disabled={!lobbyPreview.canStart}>
                   Старт
                 </button>
               ) : null}
@@ -822,7 +822,20 @@ export default function ThemeLab() {
               values={values}
               setToken={setToken}
               unsetToken={unsetToken}
-              tokenKeys={['--quizzy-surface', '--quizzy-surface-2', '--quizzy-text', '--quizzy-muted', '--quizzy-pill-bg', '--quizzy-border', '--quizzy-player-ready-on']}
+              tokenKeys={[
+                '--quizzy-surface',
+                '--quizzy-surface-2',
+                '--quizzy-text',
+                '--quizzy-muted',
+                '--quizzy-pill-bg',
+                '--quizzy-border',
+                '--quizzy-option-bg',
+                '--quizzy-option-text',
+                '--quizzy-primary',
+                '--quizzy-success',
+                '--quizzy-danger',
+                '--quizzy-player-ready-on',
+              ]}
             />
           </div>
         </div>
@@ -836,8 +849,6 @@ export default function ThemeLab() {
             <button className="btn btn-secondary">Secondary</button>
             <button className="btn btn-ghost">Ghost</button>
             <button className="btn btn-danger">Danger</button>
-            <button className="btn rounded-none">Square</button>
-            <button className="btn rounded-full">Rounded</button>
           </div>
           <div className="flex flex-col gap-4">
             <div className="font-semibold">Токены</div>
@@ -856,6 +867,9 @@ export default function ThemeLab() {
                 '--quizzy-primary',
                 '--quizzy-secondary',
                 '--quizzy-danger',
+                '--quizzy-success',
+                '--quizzy-exit-btn-bg',
+                '--quizzy-exit-btn-fg',
               ]}
             />
           </div>

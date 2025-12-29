@@ -34,6 +34,20 @@ const normalizeMediaUrl = (file, folder) => {
 
 const isPlaceholderMedia = (url) => url === '/media/placeholder.png'
 
+const palette = {
+  primary: 'var(--qz-blue)',
+  primary10: 'var(--qz-blue-10)',
+  primary60: 'var(--qz-blue-60)',
+  text: 'var(--qz-text)',
+  muted: 'var(--qz-gray)',
+  white: 'var(--qz-white)',
+  black: 'var(--qz-black)',
+  black5: 'var(--qz-black-5)',
+  yellow: 'var(--qz-yellow)',
+  success: 'var(--qz-success)',
+  error: 'var(--qz-error)',
+}
+
 const difficultyMeta = {
   easy: { label: 'ЛЕГКО', badge: 'badge-q2' },
   medium: { label: 'СРЕДНЕ', badge: 'badge-q3' },
@@ -113,6 +127,14 @@ const Spectate = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Моргание правильного ответа
+  useEffect(() => {
+    if (phase !== PHASES.REVEAL || correctAnswer === null) return
+    setFlashCorrect(true)
+    const t = setTimeout(() => setFlashCorrect(false), 1800)
+    return () => clearTimeout(t)
+  }, [phase, correctAnswer])
 
   const loadGame = async () => {
     try {
@@ -802,14 +824,14 @@ const Spectate = () => {
               className={`card shadow-2xl border border-base-300/60 relative overflow-visible flex-1 h-full min-h-0 ${
                 isFinished ? 'overflow-hidden' : ''
               }`}
-              style={{ background: '#11192a' }}
+              style={{ background: palette.black }}
             >
               {!isFinished ? (
                 <div className="absolute -top-3 left-4 flex flex-wrap gap-2 pointer-pass">
                   {gameStatus === 'active' ? (
                     <>
                       {primaryChipText ? (
-                        <div className="px-3 py-1 rounded-full bg-[#e5d423] text-black text-xs font-bold uppercase pointer-pass">
+                        <div className="px-3 py-1 rounded-full text-xs font-bold uppercase pointer-pass" style={{ backgroundColor: palette.yellow, color: palette.black }}>
                           {primaryChipText}
                         </div>
                       ) : null}
@@ -821,7 +843,7 @@ const Spectate = () => {
                     </>
                   ) : (
                     <>
-                      <div className="px-3 py-1 rounded-full bg-[#e5d423] text-black text-xs font-bold uppercase pointer-pass max-w-[70vw] lg:max-w-[820px] truncate">
+                      <div className="px-3 py-1 rounded-full text-xs font-bold uppercase pointer-pass max-w-[70vw] lg:max-w-[820px] truncate" style={{ backgroundColor: palette.yellow, color: palette.black }}>
                         {game?.topic || game?.topicName || 'Тема'}
                       </div>
                       {difficultyChip ? (
@@ -858,10 +880,11 @@ const Spectate = () => {
                                   ? 'bg-gradient-to-r from-gray-500 to-slate-600 text-white'
                                   : index === 2
                                   ? 'bg-gradient-to-r from-amber-700 to-amber-800 text-white'
-                                  : 'bg-[#0f1626] border border-[#3a4de6]/60'
+                                  : 'bg-[var(--qz-black)] border'
                               } ${online === false ? 'opacity-70 grayscale' : ''}`}
+                              style={index >= 3 ? { borderColor: palette.primary } : undefined}
                             >
-                              <div className="w-10 h-10 rounded-full bg-black/20 border border-[#3a4de6]/60 flex items-center justify-center font-black text-lg tabular-nums">
+                              <div className="w-10 h-10 rounded-full flex items-center justify-center font-black text-lg tabular-nums" style={{ backgroundColor: palette.black5, border: `1px solid ${palette.primary}` }}>
                                 {index + 1}
                               </div>
                               <div className="avatar">
@@ -879,7 +902,7 @@ const Spectate = () => {
                                     `${player?.player?.firstName || ''} ${player?.player?.lastName || ''}`.trim() ||
                                     'User'}
                                 </div>
-                                <div className="text-sm opacity-90">Общий рейтинг: {player?.player?.totalScore ?? 0}</div>
+                                <div className="text-sm opacity-90">🏆 {player?.player?.totalScore ?? 0}</div>
                               </div>
                               <div className="text-2xl font-black tabular-nums">{player?.score ?? 0}</div>
                             </div>
@@ -1024,24 +1047,33 @@ const Spectate = () => {
 
                           const correctPos = inSequencePresentation && hasOriginal ? correctPosByOriginalIndex.get(originalIndex) : undefined
                           const orderNumber = correctPos !== undefined ? correctPos + 1 : null
-                          const isSeqHighlighted =
-                            inSequencePresentation && correctPos !== undefined && correctPos < (sequenceReveal?.highlightCount || 0)
+                          const seqHighlight = inSequencePresentation && correctPos !== undefined && correctPos < (sequenceReveal?.highlightCount || 0)
 
-                          const isCorrect =
-                            !inSequencePresentation && correctAnswer !== null && hasOriginal && Number(correctAnswer) === originalIndex
+                          const isCorrect = !inSequencePresentation && correctAnswer !== null && hasOriginal && Number(correctAnswer) === originalIndex
                           const isDimmed = !inSequencePresentation && correctAnswer !== null && !isCorrect
 
                           const letter = hasOriginal ? letterByOriginalIndex.get(originalIndex) || String.fromCharCode(65 + displayIndex) : String.fromCharCode(65 + displayIndex)
 
-                          const base = inSequencePresentation
-                            ? isSeqHighlighted
-                              ? 'bg-green-700 border-green-500 text-white shadow-md'
-                              : 'bg-base-200 border-base-300/60 text-white shadow-md'
-                            : correctAnswer === null
-                            ? 'bg-base-200 border-base-300/60 text-white shadow-md'
-                            : isCorrect
-                            ? 'bg-green-700 border-green-500 text-white shadow-md'
-                            : 'bg-base-200 border-base-300/60 text-white shadow-sm'
+                          const baseBg = 'var(--quizzy-option-bg)'
+                          const baseText = 'var(--quizzy-option-text)'
+                          const correctBg = 'var(--quizzy-success)'
+                          const delay = inSequencePresentation && correctPos !== undefined ? Math.max(0, correctPos) * 200 : 0
+
+                          let background = baseBg
+                          let color = baseText
+                          let borderColor = 'transparent'
+
+                          if (inSequencePresentation) {
+                            if (seqHighlight) {
+                              background = correctBg
+                              color = palette.white
+                            }
+                          } else if (correctAnswer !== null) {
+                            if (isCorrect) {
+                              background = correctBg
+                              color = palette.white
+                            }
+                          }
 
                           return (
                             <div
@@ -1050,15 +1082,24 @@ const Spectate = () => {
                                 if (el) optionRowRefs.current.set(stableId, el)
                                 else optionRowRefs.current.delete(stableId)
                               }}
-                              className={`w-full px-7 py-5 rounded-2xl border transition-colors duration-200 will-change-transform ${base} ${
-                                isDimmed ? 'opacity-70' : ''
-                              }`}
+                              className={`w-full px-7 py-5 rounded-2xl border will-change-transform ${isDimmed ? 'opacity-70' : ''}`}
+                              style={{
+                                background,
+                                color,
+                                borderColor: borderColor !== 'transparent' ? borderColor : 'transparent',
+                                '--answer-correct-bg': correctBg,
+                                animation:
+                                  correctAnswer !== null && isCorrect
+                                    ? `answer-flash 0.24s steps(2, end) 3 forwards`
+                                    : undefined,
+                                animationDelay: correctAnswer !== null && isCorrect ? `${delay}ms` : undefined,
+                              }}
                             >
                               <div className="flex items-center gap-4">
                                 <span className="w-10 h-10 rounded-full bg-black/20 border border-white/10 flex items-center justify-center font-black text-lg">
                                   {letter}
                                 </span>
-                                <span className="text-xl font-semibold flex-1 min-w-0 text-center break-words">{opt.text}</span>
+                                <span className="text-xl font-semibold flex-1 min-w-0 break-words">{opt.text}</span>
                                 {inSequencePresentation && sequenceReveal?.showNumbers && orderNumber !== null ? (
                                   <span className="w-10 h-10 rounded-full bg-black/20 border border-white/10 flex items-center justify-center font-black text-lg tabular-nums">
                                     {orderNumber}
@@ -1113,7 +1154,7 @@ const Spectate = () => {
             className={`w-full ${playersWidthClass} lg:order-1 flex flex-col min-h-0`}
           >
             <div className="card glass-card shadow-xl border border-base-300/60 w-full relative overflow-visible flex-1 h-full min-h-0">
-              <div className="absolute -top-3 left-4 px-3 py-1 rounded-full bg-[#e5d423] text-black text-xs font-bold uppercase pointer-pass">
+              <div className="absolute -top-3 left-4 px-3 py-1 rounded-full text-xs font-bold uppercase pointer-pass" style={{ backgroundColor: palette.yellow, color: palette.black }}>
                 Игроки: {renderPlayers.length}
               </div>
               <div className="card-body pt-8 flex flex-col min-h-0">
@@ -1147,12 +1188,20 @@ const Spectate = () => {
                           : playersLayout.tier === 'compact'
                           ? 'px-3 py-3'
                           : 'px-4 py-4'
-                      } rounded-xl bg-base-200 border border-[#3a4de6] will-change-transform ${
+                      } rounded-xl bg-base-200 border will-change-transform ${
                         p?.isOnline === false ? 'opacity-60 grayscale' : ''
                       }`}
+                      style={{ borderColor: palette.primary }}
                     >
                       <span
-                        className={`rounded-full bg-black/20 border border-[#3a4de6]/60 flex items-center justify-center font-black tabular-nums ${
+                        className="rounded-full flex items-center justify-center font-black tabular-nums"
+                        style={{
+                          backgroundColor: palette.black5,
+                          border: `1px solid ${palette.primary}`,
+                        }}
+                      >
+                        <span
+                          className={`${
                           playersLayout.tier === 'micro'
                             ? 'w-5 h-5 text-[10px]'
                             : playersLayout.tier === 'ultra'
@@ -1160,9 +1209,10 @@ const Spectate = () => {
                             : playersLayout.tier === 'compact'
                             ? 'w-7 h-7 text-sm'
                             : 'w-8 h-8 text-base'
-                        }`}
-                      >
-                        {idx + 1}
+                        } flex items-center justify-center`}
+                        >
+                          {idx + 1}
+                        </span>
                       </span>
                       <div className="avatar">
                         <div
@@ -1212,9 +1262,10 @@ const Spectate = () => {
                         {showDelta && delta > 0 ? (
                           <div
                             key={`${id ?? idx}:${delta}:${barKey}`}
-                            className={`quizzy-float-up text-green-300 font-black tabular-nums ${
+                            className={`quizzy-float-up font-black tabular-nums ${
                               playersLayout.tier === 'micro' ? 'text-xs' : 'text-sm'
                             }`}
+                            style={{ color: palette.success }}
                           >
                             +{delta}
                           </div>
@@ -1233,7 +1284,8 @@ const Spectate = () => {
                           </div>
                           <CheckCircle2
                             size={playersLayout.tier === 'micro' ? 14 : playersLayout.tier === 'ultra' ? 16 : 18}
-                            className={`${isReadyState ? 'text-green-400' : 'text-base-300/70'} shrink-0`}
+                            className="shrink-0"
+                            style={{ color: isReadyState ? palette.success : 'var(--qz-gray)' }}
                           />
                         </div>
                       </div>

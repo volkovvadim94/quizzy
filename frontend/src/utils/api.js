@@ -57,6 +57,7 @@ export const gameAPI = {
 
 export const questionAPI = {
   getTopics: () => api.get('/api/questions/topics'),
+  getTopicCollections: (topicId) => api.get(`/api/questions/topics/${encodeURIComponent(String(topicId))}/collections`),
 }
 
 export default api

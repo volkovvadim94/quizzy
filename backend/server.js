@@ -13,6 +13,7 @@ import authRoutes from './src/routes/auth.js';
 import gameRoutes from './src/routes/games.js';
 import questionRoutes from './src/routes/questions.js';
 import configRoutes from './src/routes/config.js';
+import adminRoutes from './src/routes/admin.js';
 
 import { setupSocketHandlers } from './src/sockets/gameHandlers.js';
 import { logStartupInfo } from './src/utils/startupInfo.js';
@@ -38,6 +39,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/games', gameRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/config', configRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Socket.io
 setupSocketHandlers(io);

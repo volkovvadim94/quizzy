@@ -282,8 +282,16 @@ const pickQuestionsPreset = (all, difficulty) => {
 }
 
 const buildQuestions = async (room) => {
+  const where = { topicId: room.topicId }
+  const collectionIds = Array.isArray(room?.collectionIds)
+    ? room.collectionIds.map((v) => Number(v)).filter((n) => Number.isFinite(n))
+    : []
+  if (collectionIds.length) {
+    where.collections = { some: { id: { in: collectionIds } } }
+  }
+
   const all = await prisma.question.findMany({
-    where: { topicId: room.topicId },
+    where,
     orderBy: { createdAt: 'desc' },
   })
   const withParsed = all.map((q) => ({ ...q, options: parseOptions(q.options) }))
@@ -790,6 +798,27 @@ export const setupSocketHandlers = (io) => {
 
         const sid = normalizeClientSessionId(clientSessionId)
         if (!sid) return socket.emit('ERROR', { message: 'Missing clientSessionId' })
+
+        const topicLock = await prisma.userTopicLock.findUnique({
+          where: { userId_topicId: { userId: pid, topicId: room.topicId } },
+          select: { userId: true },
+        })
+        if (topicLock) {
+          return socket.emit('ERROR', { message: 'Эта тема недоступна' })
+        }
+
+        const roomCollectionIds = Array.isArray(room?.collectionIds)
+          ? room.collectionIds.map((v) => Number(v)).filter((n) => Number.isFinite(n))
+          : []
+        if (roomCollectionIds.length) {
+          const collectionLock = await prisma.userCollectionLock.findFirst({
+            where: { userId: pid, collectionId: { in: roomCollectionIds } },
+            select: { collectionId: true },
+          })
+          if (collectionLock) {
+            return socket.emit('ERROR', { message: 'Эта подборка недоступна' })
+          }
+        }
 
         if (!room.players?.has?.(pid) && (room.players?.size || 0) >= MAX_PLAYERS_PER_ROOM) {
           logEvent('room.join.denied', {

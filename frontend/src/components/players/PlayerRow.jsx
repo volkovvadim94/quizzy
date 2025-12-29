@@ -103,7 +103,7 @@ export default function PlayerRow({
         {showGameScore ? (
           <div className="relative text-right">
             {deltaText ? (
-              <div key={deltaKey} className="absolute -top-5 right-0 text-sm font-bold score-delta" style={{ color: deltaColor }}>
+              <div key={deltaKey} className="absolute top-3 right-0 text-sm font-bold score-delta" style={{ color: deltaColor }}>
                 {deltaText}
               </div>
             ) : null}
@@ -122,4 +122,3 @@ export default function PlayerRow({
     </div>
   )
 }
-

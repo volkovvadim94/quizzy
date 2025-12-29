@@ -135,11 +135,45 @@ const generateUniqueRoomCode = async () => {
 
 router.post('/create', authenticateToken, async (req, res) => {
   try {
-    const { topicId, topic: topicParam, topicSlug, difficulty } = req.body
+    const { topicId, topic: topicParam, topicSlug, difficulty, collectionId, collectionIds } = req.body
     const topic = await getTopicByPayload({ topicId: topicId ?? topicParam, topicName: topicParam, topicSlug })
 
     if (!topic) {
       return res.status(400).json({ error: 'Тема не найдена' })
+    }
+
+    const selectedCollectionIdsRaw = Array.isArray(collectionIds)
+      ? collectionIds
+      : collectionId !== undefined && collectionId !== null
+        ? [collectionId]
+        : []
+    const selectedCollectionIds = selectedCollectionIdsRaw.map((v) => Number(v)).filter((n) => Number.isFinite(n))
+
+    const userId = Number(req.user.id)
+    const topicLock = await prisma.userTopicLock.findUnique({
+      where: { userId_topicId: { userId, topicId: topic.id } },
+      select: { userId: true },
+    })
+    if (topicLock) {
+      return res.status(403).json({ error: 'Эта тема недоступна для этого игрока' })
+    }
+
+    if (selectedCollectionIds.length) {
+      const locked = await prisma.userCollectionLock.findFirst({
+        where: { userId, collectionId: { in: selectedCollectionIds } },
+        select: { collectionId: true },
+      })
+      if (locked) {
+        return res.status(403).json({ error: 'Эта подборка недоступна для этого игрока' })
+      }
+
+      const collections = await prisma.collection.findMany({
+        where: { id: { in: selectedCollectionIds }, topicId: topic.id, isActive: true },
+        select: { id: true },
+      })
+      if (collections.length !== selectedCollectionIds.length) {
+        return res.status(400).json({ error: 'Некорректная подборка' })
+      }
     }
 
     const allowDifficulty = featureDifficultySelection()
@@ -175,6 +209,7 @@ router.post('/create', authenticateToken, async (req, res) => {
       topicName: topic.name,
       difficulty: chosenDifficulty,
       organizerId: req.user.id,
+      collectionIds: selectedCollectionIds,
     })
     if (featureBots()) addBotsToRoom(room)
 

@@ -1,12 +1,13 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { LogOut, Trophy } from 'lucide-react'
 import { useAuth } from '../../hooks/useAuth'
 import { useSocket } from '../../hooks/useSocket'
 import { getInitDataRaw, getTelegramStartParam, getTelegramWebApp } from '../../utils/telegram'
 import { init, isTMA, viewport } from '../../utils/tma'
 import { applyStoredTokenOverrides } from '../../theme/tokens'
 import { authAPI } from '../../utils/api'
+import BottomNav from '../nav/BottomNav'
+import { tgTopPadding } from '../../utils/safeArea'
 import {
   STORAGE_KEYS,
   getActiveGame,
@@ -22,7 +23,7 @@ import {
 import { gameAPI } from '../../utils/api'
 
 export default function Layout({ children }) {
-  const { user, logout, loading } = useAuth()
+  const { user, loading } = useAuth()
   const { socket, on, off, emit } = useSocket()
   const navigate = useNavigate()
   const location = useLocation()
@@ -32,6 +33,17 @@ export default function Layout({ children }) {
   const isWebApp = Boolean(tgWebApp?.initData)
   const handledQrLoginRef = useRef(false)
 
+  const [theme, setTheme] = useState(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEYS.theme)
+      if (stored === 'quizzyLight' || stored === 'quizzyDark') return stored
+    } catch {
+      // ignore
+    }
+    const current = document.documentElement.getAttribute('data-theme')
+    return current === 'quizzyLight' ? 'quizzyLight' : 'quizzyDark'
+  })
+
   const resolveStartRoomCode = () => {
     const startParam = getTelegramStartParam()
     const roomCode = (startParam || '').trim()
@@ -39,10 +51,15 @@ export default function Layout({ children }) {
   }
 
   useEffect(() => {
-    const theme = 'quizzyDark'
-    document.documentElement.setAttribute('data-theme', theme)
+    const root = document.documentElement
+    root.setAttribute('data-theme', theme)
     applyStoredTokenOverrides(theme)
-  }, [])
+    try {
+      localStorage.setItem(STORAGE_KEYS.theme, theme)
+    } catch {
+      // ignore
+    }
+  }, [theme])
 
   // Telegram: always request full-viewport + fullscreen when available.
   useEffect(() => {
@@ -58,6 +75,20 @@ export default function Layout({ children }) {
 
           if (viewport.requestFullscreen.isAvailable()) {
             await viewport.requestFullscreen()
+          }
+
+          // Prevent accidental mini-app collapse by vertical swipe (when supported by client).
+          try {
+            tgWebApp?.disableVerticalSwipes?.()
+          } catch (e) {
+            console.warn('Telegram WebApp disableVerticalSwipes failed:', e)
+          }
+
+          // Disable swipe-back gesture when supported (Android).
+          try {
+            tgWebApp?.setSwipeBackEnabled?.(false)
+          } catch (e) {
+            console.warn('Telegram WebApp setSwipeBackEnabled failed:', e)
           }
         }
       } catch (e) {
@@ -120,6 +151,11 @@ export default function Layout({ children }) {
   useEffect(() => {
     if (loading) return
 
+    const isProfile = location.pathname.startsWith('/profile')
+    const isRating = location.pathname.startsWith('/rating')
+    const isSettings = location.pathname.startsWith('/settings')
+    if (isProfile || isRating || isSettings) return
+
     const active = getActiveGame()
 
     if (!user) {
@@ -133,9 +169,16 @@ export default function Layout({ children }) {
           if (startRoom) {
             setLastRoomHint(startRoom)
             const isSpectate = location.pathname.startsWith('/spectate/')
-            const isOnProfile = location.pathname.startsWith('/profile')
             const isOnThemeLab = location.pathname.startsWith('/themelab')
-            if (!isSpectate && !isOnProfile && !isOnThemeLab && !location.pathname.startsWith('/room/') && !location.pathname.startsWith('/game/')) {
+            if (
+              !isSpectate &&
+              !isProfile &&
+              !isRating &&
+              !isSettings &&
+              !isOnThemeLab &&
+              !location.pathname.startsWith('/room/') &&
+              !location.pathname.startsWith('/game/')
+            ) {
               navigate(`/room/${startRoom}`, { replace: true })
               return
             }
@@ -151,8 +194,10 @@ export default function Layout({ children }) {
       const isOnGame = location.pathname.startsWith('/game/')
       const isDirectRoom = location.pathname === `/${activeGame}`
       const isSpectate = location.pathname.startsWith('/spectate/')
-      const isOnProfile = location.pathname.startsWith('/profile')
+      const isOnProfile = isProfile
       const isOnThemeLab = location.pathname.startsWith('/themelab')
+      const isOnRating = isRating
+      const isOnSettings = isSettings
 
       // Проверяем статус комнаты: если её нет или finished — очищаем локальное состояние
       try {
@@ -169,7 +214,7 @@ export default function Layout({ children }) {
         return
       }
 
-      if (!isOnRoom && !isOnGame && !isDirectRoom && !isSpectate && !isOnProfile && !isOnThemeLab) {
+      if (!isOnRoom && !isOnGame && !isDirectRoom && !isSpectate && !isOnProfile && !isOnRating && !isOnSettings && !isOnThemeLab) {
         const target = activePhase === 'active' ? `/game/${activeGame}` : `/room/${activeGame}`
         navigate(target, { replace: true })
       }
@@ -183,6 +228,10 @@ export default function Layout({ children }) {
     const matchRoomIdFromPath = () => {
       const m = location.pathname.match(/^\/(?:room|game)\/([A-Za-z0-9]{6})/)
       return m?.[1] || ''
+    }
+
+    if (location.pathname.startsWith('/profile') || location.pathname.startsWith('/rating') || location.pathname.startsWith('/settings')) {
+      return
     }
 
     const handleTakenOver = ({ gameId } = {}) => {
@@ -261,6 +310,8 @@ export default function Layout({ children }) {
         location.pathname.startsWith('/game/') ||
         location.pathname.startsWith('/spectate/') ||
         location.pathname.startsWith('/profile') ||
+        location.pathname.startsWith('/rating') ||
+        location.pathname.startsWith('/settings') ||
         location.pathname.startsWith('/themelab') ||
         location.pathname.startsWith('/session-switched') ||
         /^\/[A-Za-z0-9]{6}$/.test(location.pathname)
@@ -287,81 +338,80 @@ export default function Layout({ children }) {
     }
   }, [user, socket, emit, on, off, navigate, location.pathname])
 
-  const score = user?.totalScore ?? 0
-  const displayName =
-    user?.username || `${user?.firstName || ''} ${user?.lastName || ''}`.trim() || 'Игрок'
+  const pathname = location.pathname
+  const showBottomNav =
+    !!user &&
+    (pathname === '/' ||
+      pathname === '/home' ||
+      pathname.startsWith('/profile') ||
+      pathname.startsWith('/rating') ||
+      pathname.startsWith('/settings'))
+
+  const activeTab = pathname.startsWith('/profile')
+    ? 'profile'
+    : pathname.startsWith('/rating')
+      ? 'rating'
+      : pathname.startsWith('/settings')
+        ? 'settings'
+        : 'game'
+
+  const toggleTheme = () => setTheme((t) => (t === 'quizzyDark' ? 'quizzyLight' : 'quizzyDark'))
 
   // TV/Spectate mode must be full-bleed without the app header.
   if (location.pathname.startsWith('/spectate/')) {
     return (
       <div className="page-shell text-base-content transition-colors flex flex-col h-screen overflow-hidden">
-        <main className="scroll-mask flex-1 min-h-0 w-full safe-bottom">{children}</main>
+        <main className="scroll-mask flex-1 min-h-0 w-full safe-bottom px-4 py-4">{children}</main>
       </div>
     )
   }
 
+  const hideAppHeader =
+    showBottomNav ||
+    pathname.startsWith('/new-game') ||
+    pathname === '/join' ||
+    pathname.startsWith('/room/') ||
+    pathname.startsWith('/game/')
+
+  const isHomeScreen = pathname === '/' || pathname === '/home'
+
   return (
     <div className="page-shell text-base-content transition-colors flex flex-col h-screen overflow-hidden">
-      {isWebApp ? (
+      {hideAppHeader ? null : (
         <div
-          className="navbar sticky top-0 z-30 px-4 justify-center items-start shadow-none border-b pt-[calc(env(safe-area-inset-top,0px)+20px)] pb-2 min-h-[110px]"
-          style={{ backgroundColor: 'var(--quizzy-tg-header-bg)', borderBottomColor: 'var(--quizzy-header-border)' }}
+        className={`navbar sticky top-0 z-30 px-4 justify-center shadow-none ${
+          isWebApp ? 'items-start pt-[calc(env(safe-area-inset-top,0px)+20px)] pb-2 min-h-[110px]' : 'items-center py-4 min-h-[72px]'
+        }`}
+        style={{ backgroundColor: 'var(--quizzy-header-bg)' }}
+      >
+        <button
+          type="button"
+          onClick={toggleTheme}
+          className="flex items-center justify-center select-none"
+          aria-label={theme === 'quizzyDark' ? 'Включить светлую тему' : 'Включить тёмную тему'}
+          title={theme === 'quizzyDark' ? 'Светлая тема' : 'Тёмная тема'}
         >
-          <button onClick={() => navigate('/')} className="flex items-center justify-center">
-            <img src="/logo.png" alt="Quizzy" className="h-20 w-auto" />
-          </button>
-        </div>
-      ) : (
-        <div className="navbar navbar-surface shadow-2xl sticky top-0 z-30 px-4">
-        <div className="navbar-start gap-3">
-          <button className="text-[2.4rem] font-black tracking-tight text-white" onClick={() => navigate('/')}>
-            QUIZZY
-          </button>
-        </div>
-
-        <div className="navbar-center" />
-
-        <div className="navbar-end gap-3">
-          {user ? (
-            <div className="flex items-center gap-2">
-              <div
-                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-white text-sm font-semibold"
-                style={{ backgroundColor: 'var(--quizzy-pill-bg)' }}
-                title="Глобальный рейтинг"
-              >
-                <Trophy size={16} style={{ color: 'var(--quizzy-accent)' }} />
-                <span>{score}</span>
-              </div>
-
-              <div className="avatar select-none" title={displayName} style={{ cursor: 'default' }}>
-                <div className="w-10 h-10 rounded-full overflow-hidden bg-primary text-primary-content flex items-center justify-center">
-                  {user.avatarUrl ? (
-                    <img src={user.avatarUrl} alt={displayName} className="object-cover w-full h-full" />
-                  ) : (
-                    <span className="text-sm font-bold">{displayName.slice(0, 1).toUpperCase()}</span>
-                  )}
-                </div>
-              </div>
-
-              {isWebApp ? null : (
-                <button
-                  onClick={logout}
-                  className="w-11 h-11 rounded-full flex items-center justify-center"
-                  style={{ backgroundColor: 'var(--quizzy-danger)', color: 'var(--quizzy-btn-fg)' }}
-                  title="Выйти"
-                >
-                  <LogOut size={18} />
-                </button>
-              )}
-            </div>
-          ) : null}
-        </div>
+          <img src="/logo.png" alt="Quizzy" className={isWebApp ? 'h-20 w-auto' : 'h-16 w-auto'} />
+        </button>
         </div>
       )}
 
-      <main className="container mx-auto px-4а1b2d4f py-4 flex-1 min-h-0 w-full flex flex-col gap-4 overflow-hidden safe-bottom">
+      <main
+        className={`flex-1 min-h-0 w-full flex flex-col gap-4 ${
+          showBottomNav
+            ? `${isHomeScreen ? 'overflow-hidden' : 'scroll-mask overflow-y-auto'} safe-bottom-nav max-w-[430px] mx-auto px-3`
+            : 'container mx-auto px-4 py-4 overflow-hidden safe-bottom'
+        }`}
+        style={
+          showBottomNav
+            ? { paddingTop: tgTopPadding(isWebApp, { defaultExtraPx: isHomeScreen ? 20 : 12 }) }
+            : undefined
+        }
+      >
         {children}
       </main>
+
+      {showBottomNav ? <BottomNav active={activeTab} onNavigate={(to) => navigate(to)} /> : null}
     </div>
   )
 }

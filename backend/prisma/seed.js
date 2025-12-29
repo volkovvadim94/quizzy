@@ -1915,4 +1915,15 @@ async function seedDatabase() {
 }
 
 // Запускаем заполнение базы данных
-seedDatabase();
+seedDatabase()
+  .then(async () => {
+    try {
+      const mod = await import('./migrateCollections.js')
+      if (typeof mod?.default === 'function') await mod.default()
+    } catch (e) {
+      console.error('Collections post-seed migration failed:', e)
+    }
+  })
+  .catch(() => {
+    // seedDatabase logs its own errors
+  })

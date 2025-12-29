@@ -18,6 +18,8 @@ model User {
   createdAt  DateTime @default(now())
 
   topicScores UserTopicScore[]
+  topicLocks  UserTopicLock[]
+  collectionLocks UserCollectionLock[]
 }
 
 model Topic {
@@ -27,8 +29,27 @@ model Topic {
   createdAt DateTime  @default(now())
 
   questions   Question[]
+  collections Collection[]
   rooms       Room[]
   topicScores UserTopicScore[]
+  topicLocks  UserTopicLock[]
+}
+
+model Collection {
+  id        Int      @id @default(autoincrement())
+  topicId   Int
+  name      String
+  slug      String
+  isActive  Boolean  @default(true)
+  isFree    Boolean  @default(true)
+  priceGems Int?
+  createdAt DateTime @default(now())
+
+  topic      Topic     @relation(fields: [topicId], references: [id])
+  questions  Question[]
+  locks      UserCollectionLock[]
+
+  @@unique([topicId, slug])
 }
 
 model Question {
@@ -46,6 +67,7 @@ model Question {
   createdAt        DateTime @default(now())
 
   topic Topic @relation(fields: [topicId], references: [id])
+  collections Collection[]
 }
 
 model Room {
@@ -70,4 +92,28 @@ model UserTopicScore {
   topic Topic @relation(fields: [topicId], references: [id])
 
   @@id([userId, topicId])
+}
+
+model UserTopicLock {
+  userId   Int
+  topicId  Int
+  reason   String?
+  lockedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+  topic Topic @relation(fields: [topicId], references: [id])
+
+  @@id([userId, topicId])
+}
+
+model UserCollectionLock {
+  userId       Int
+  collectionId Int
+  reason       String?
+  lockedAt     DateTime @default(now())
+
+  user       User       @relation(fields: [userId], references: [id])
+  collection Collection @relation(fields: [collectionId], references: [id])
+
+  @@id([userId, collectionId])
 }

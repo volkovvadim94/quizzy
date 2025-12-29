@@ -1,288 +1,111 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import { useConfig } from '../hooks/useConfig'
-import { gameAPI, questionAPI } from '../utils/api'
-import { Play } from 'lucide-react'
-import Snackbar from '../components/feedback/Snackbar'
-import DifficultyModal from '../components/modals/DifficultyModal'
-import TopicCard from '../components/topics/TopicCard'
 
-const difficulties = [
-  { id: 'easy', name: 'Легко', color: 'badge-q2', description: 'Подходит для разогрева' },
-  { id: 'medium', name: 'Средне', color: 'badge-q3', description: 'Чуть сложнее, но без боли' },
-  { id: 'hard', name: 'Сложно', color: 'badge-q4', description: 'Нужны знания и скорость' },
-  { id: 'hardcore', name: 'Хардкор', color: 'badge-q1', description: 'Для сильных духом' },
-]
-
-const getTopicSlug = (topic) => {
-  if (topic?.slug) return topic.slug
-  const raw = (topic?.name || topic?.id || 'default').toString().toLowerCase()
-  return raw.replace(/[^a-z0-9а-яё]+/gi, '_')
+function formatNumber(value) {
+  const n = Number(value || 0)
+  return new Intl.NumberFormat('ru-RU').format(Number.isFinite(n) ? n : 0)
 }
 
-const Home = () => {
-  const { user, isAuthenticated } = useAuth()
-  const { features } = useConfig()
-  // Требуем авторизацию
-  if (!user) return <Navigate to="/welcome" replace />
+function getDisplayName(user) {
+  if (!user) return ''
+  if (user.username) return user.username
+  const first = user.firstName || ''
+  const last = user.lastName || ''
+  const full = `${first} ${last}`.trim()
+  return full || 'Игрок'
+}
 
+function getGamerTier() {
+  return 'Геймер V'
+}
+
+const palette = {
+  primary: 'var(--qz-blue)',
+  text: 'var(--qz-text)',
+  muted: 'var(--qz-gray)',
+  border: 'var(--qz-black-5)',
+  black: 'var(--qz-black)',
+  yellow: 'var(--qz-yellow)',
+}
+
+function ActionCard({ title, subtitle, imageSrc, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="relative w-full h-[300px] rounded-[20px] overflow-hidden bg-[var(--qz-black)] shadow-[0_32px_64px_rgba(0,0,0,0.04),0_0_2px_rgba(0,0,0,0.02)] text-left"
+    >
+      <img src={imageSrc} alt="" className="absolute inset-0 w-full h-full object-cover" />
+      <img src="/_mock/home-body.png" alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
+      <div className="absolute inset-x-0 bottom-0 h-[129px] bg-gradient-to-t from-black via-black/70 to-transparent" />
+      <div className="absolute left-5 right-5 bottom-5">
+        <div className="text-white text-[17px] leading-[22px] font-semibold tracking-[-0.4px]">{title}</div>
+        <div className="text-white/60 text-[15px] leading-[22px] font-normal">{subtitle}</div>
+      </div>
+    </button>
+  )
+}
+
+export default function Home() {
+  const { user } = useAuth()
   const navigate = useNavigate()
 
-  const [topics, setTopics] = useState([])
-  const [loadingTopics, setLoadingTopics] = useState(true)
+  const displayName = useMemo(() => getDisplayName(user), [user])
+  const totalScore = user?.totalScore ?? 0
+  const gems = 0
+  const tier = useMemo(() => getGamerTier(totalScore), [totalScore])
+  const avatarUrl = user?.avatarUrl || '/_mock/avatar.png'
 
-  const [gameCode, setGameCode] = useState('')
-  const [creating, setCreating] = useState(false)
-
-  const [selectedTopic, setSelectedTopic] = useState(null)
-  const modalRef = useRef(null)
-
-  const [snackbar, setSnackbar] = useState({ message: '', type: 'success', visible: false })
-  const snackTimer = useRef(null)
-
-  // для защиты от "клик после скролла" (и для Android drag-scroll фикса)
-  const topicsScrollRef = useRef(null)
-  const isScrollingRef = useRef(false)
-  const scrollResetTimer = useRef(null)
-
-  const isAndroid = useMemo(() => /Android/i.test(navigator?.userAgent || ''), [])
-
-  // Telegram WebApp (в т.ч. Android WebView)
-  const isWebApp = useMemo(() => Boolean(window?.Telegram?.WebApp?.initData), [])
-
-  // Важно: если пользователь не авторизован — показываем экран входа,
-  // а не основной Home (иначе человек видит темы, но дальше всё равно упрётся в авторизацию).
-
-  const showSnackbar = (message, type = 'success') => {
-    if (snackTimer.current) clearTimeout(snackTimer.current)
-    setSnackbar({ message, type, visible: true })
-    snackTimer.current = setTimeout(() => setSnackbar((prev) => ({ ...prev, visible: false })), 2000)
-  }
-
-  useEffect(() => {
-    const el = topicsScrollRef.current
-    if (!el) return
-
-    const markScrolling = () => {
-      isScrollingRef.current = true
-      if (scrollResetTimer.current) clearTimeout(scrollResetTimer.current)
-      scrollResetTimer.current = setTimeout(() => {
-        isScrollingRef.current = false
-      }, 140)
-    }
-
-    // ✅ Android Telegram WebView: первый drag-scroll иногда "залипает".
-    // Решение: делаем контролируемый drag-scroll на контейнере (без инерции),
-    // чтобы WebView не перехватывал gesture в long-press/image-drag режим.
-    let dragging = false
-    let startY = 0
-    let startScrollTop = 0
-
-    const onTouchStart = (e) => {
-      if (!isAndroid || !isWebApp) return
-      if (!e.touches || e.touches.length !== 1) return
-      dragging = true
-      startY = e.touches[0].clientY
-      startScrollTop = el.scrollTop
-    }
-
-    const onTouchMove = (e) => {
-      markScrolling()
-      if (!dragging) return
-      if (!isAndroid || !isWebApp) return
-      if (!e.touches || e.touches.length !== 1) return
-
-      const y = e.touches[0].clientY
-      const dy = y - startY
-      el.scrollTop = startScrollTop - dy
-
-      // Ключевой момент: запрещаем браузеру пытаться делать что-то другое с gesture
-      // (контекстное меню/drag/selection), иначе он "обрубает" нативный scroll.
-      e.preventDefault()
-    }
-
-    const onTouchEnd = () => {
-      dragging = false
-      markScrolling()
-    }
-
-    // scroll - пассивно
-    el.addEventListener('scroll', markScrolling, { passive: true })
-
-    // touchstart/touchend - пассивно, touchmove - НЕ пассивно (нам нужен preventDefault)
-    el.addEventListener('touchstart', onTouchStart, { passive: true })
-    el.addEventListener('touchmove', onTouchMove, { passive: false })
-    el.addEventListener('touchend', onTouchEnd, { passive: true })
-    el.addEventListener('touchcancel', onTouchEnd, { passive: true })
-
-    return () => {
-      el.removeEventListener('scroll', markScrolling)
-      el.removeEventListener('touchstart', onTouchStart)
-      el.removeEventListener('touchmove', onTouchMove)
-      el.removeEventListener('touchend', onTouchEnd)
-      el.removeEventListener('touchcancel', onTouchEnd)
-      if (scrollResetTimer.current) clearTimeout(scrollResetTimer.current)
-    }
-  }, [topicsScrollRef, isAndroid, isWebApp])
-
-  useEffect(() => {
-    const fetchTopics = async () => {
-      try {
-        setLoadingTopics(true)
-        const res = await questionAPI.getTopics()
-        setTopics(Array.isArray(res.data) ? res.data : [])
-      } catch (e) {
-        setTopics([])
-        showSnackbar('Не удалось загрузить темы', 'error')
-      } finally {
-        setLoadingTopics(false)
-      }
-    }
-
-    fetchTopics()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const joinGame = () => {
-    const code = gameCode.trim().toUpperCase()
-    if (!code) {
-      showSnackbar('Введи код комнаты', 'error')
-      return
-    }
-    navigate(`/room/${code}`)
-  }
-
-  const openModal = (topic) => {
-    if (!features?.difficultySelection) {
-      createGame(topic.id, 'random')
-      return
-    }
-    setSelectedTopic(topic)
-    modalRef.current?.showModal?.()
-  }
-
-  const closeModal = () => {
-    modalRef.current?.close?.()
-    setSelectedTopic(null)
-  }
-
-  const createGame = async (topicId, difficultyId) => {
-    if (!isAuthenticated) return
-    setCreating(true)
-    try {
-      const payload = { topicId }
-      if (features?.difficultySelection && difficultyId) {
-        payload.difficulty = difficultyId
-      }
-      const response = await gameAPI.create(payload)
-      closeModal()
-      navigate(`/room/${response.data.id}`)
-    } catch (error) {
-      showSnackbar('Не удалось создать комнату', 'error')
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  const onTopicClick = (topic) => {
-    // Если пользователь прямо сейчас скроллит - не открываем модалку
-    if (isScrollingRef.current) return
-    openModal(topic)
-  }
-
-  // Если пользователь не авторизован в вебе — показываем welcome/login экран.
-  // (В Telegram WebApp авторизация может происходить "тихо" через initData —
-  // поэтому там продолжаем показывать Home.)
-  if (!isAuthenticated && !isWebApp) {
-    return (
-      <div className="flex items-center justify-center flex-1">
-        <div className="card w-full max-w-sm bg-base-200 shadow-xl">
-          <div className="card-body space-y-4 text-center">
-            <div className="text-lg font-semibold">Войди, чтобы создавать комнаты и играть.</div>
-            
-          </div>
-        </div>
-      </div>
-    )
-  }
+  if (!user) return <Navigate to="/welcome" replace />
 
   return (
-    <div className="flex flex-col gap-4 flex-1 min-h-0 overflow-hidden">
-      {/* Подключиться */}
-      <div className="card glass-card shadow-2xl border border-base-300/60 relative overflow-visible w-full max-w-[600px] mx-auto shrink-0 mt-3">
-        <div className="section-label absolute -top-3 left-4 px-3 py-1 rounded-full text-xs font-bold uppercase pointer-pass">
-          Подключиться
-        </div>
-        <div className="card-body px-6 py-4 flex flex-col justify-center">
-          <div className="w-full h-12 flex items-center rounded-xl overflow-hidden bg-base-200 room-join mt-4">
-            <input
-              type="text"
-              placeholder="Введи код комнаты"
-              className="flex-1 h-12 px-4 room-join-input bg-transparent border-0 focus:outline-none focus:ring-0 rounded-l-xl"
-              value={gameCode}
-              onChange={(e) => setGameCode(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && joinGame()}
-              inputMode="text"
-              autoCapitalize="characters"
-            />
+    <div className="w-full max-w-[430px] mx-auto pb-20">
+      <div className="pt-2">
+        <div className="flex items-center gap-3">
+          <img src={avatarUrl} alt="" className="w-12 h-12 rounded-full object-cover bg-[var(--qz-black-5)]" />
+
+          <div className="min-w-0 flex-1">
+            <div className="text-[16px] font-bold text-[var(--qz-text)] truncate">{displayName}</div>
+            <div className="text-[12px] font-bold leading-[19px] text-[var(--qz-text)]">
+              <span className="mr-1">🏆</span>
+              <span className="text-[var(--qz-yellow)]">{formatNumber(totalScore)}</span>
+              <span className="mx-1 text-[var(--qz-text)]">/</span>
+              <span className="text-[var(--qz-blue)]">{tier}</span>
+            </div>
+          </div>
+
+          <div className="shrink-0 flex items-center rounded-full border bg-white h-8 pl-2 pr-1 gap-2" style={{ borderColor: palette.primary }}>
+            <div className="text-[16px] leading-none">💎</div>
+            <div className="text-[20px] font-black text-[var(--qz-text)] leading-none">{formatNumber(gems)}</div>
             <button
-              onClick={joinGame}
-              className="room-join-btn h-12 w-[96px] px-2 font-semibold flex items-center justify-center text-sm sm:text-base leading-none text-center"
               type="button"
+              className="w-6 h-6 rounded-full text-white flex items-center justify-center leading-none font-semibold"
+              style={{ backgroundColor: palette.primary }}
+              aria-label="Пополнить"
+              title="Пополнить"
             >
-              Войти
+              +
             </button>
           </div>
         </div>
       </div>
 
-      {/* Создать игру */}
-      <div className="card glass-card shadow-2xl border border-base-300/60 relative overflow-visible w-full max-w-[600px] mx-auto flex-1 min-h-0 flex flex-col">
-        <div className="section-label absolute -top-3 left-4 px-3 py-1 rounded-full text-xs font-bold uppercase pointer-pass">
-          Создать игру
-        </div>
+      <div className="mt-4 flex flex-col gap-3">
+        <ActionCard
+          title="Подключиться к игре"
+          subtitle="Ввести код комнаты"
+          imageSrc="/topics/games.jpg"
+          onClick={() => navigate('/join')}
+        />
 
-        <div className="card-body pt-8 pb-6 px-6 flex-1 min-h-0">
-          {loadingTopics ? (
-            <div className="flex justify-center items-center h-40">
-              <span className="loading loading-spinner loading-lg"></span>
-            </div>
-          ) : (
-            <div
-              ref={topicsScrollRef}
-              className="scroll-mask grid grid-cols-1 gap-3 flex-1 min-h-0 overflow-y-auto"
-            >
-              {topics.map((topic) => {
-                const slug = getTopicSlug(topic)
-                const imgUrl = `/topics/${slug}.jpg`
-
-                return (
-                  <TopicCard
-                    key={topic.id}
-                    title={topic.name || topic.id}
-                    imageUrl={imgUrl}
-                    onClick={() => onTopicClick(topic)}
-                  />
-                )
-              })}
-
-              {topics.length === 0 && (
-                <div className="text-center py-8 opacity-50">
-                  <p>Темы не найдены</p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+        <ActionCard
+          title="Создать игру"
+          subtitle="Выбрать тему и пригласить игроков"
+          imageSrc="/topics/general.jpg"
+          onClick={() => navigate('/new-game/theme')}
+        />
       </div>
-
-      {/* Выбор сложности */}
-      <DifficultyModal modalRef={modalRef} topic={selectedTopic} difficulties={difficulties} onStart={createGame} onClose={closeModal} />
-
-      <Snackbar message={snackbar.message} type={snackbar.type} visible={snackbar.visible} />
     </div>
   )
 }
-
-export default Home
